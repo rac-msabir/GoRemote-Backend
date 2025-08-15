@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\JobSeeker;
+use App\Models\Company;
+use App\Models\CompanyUser;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -16,7 +18,7 @@ class AuthController extends Controller
             'name' => ['required','string','max:120'],
             'email' => ['required','email','max:191','unique:users,email'],
             'password' => ['required', Password::min(8)],
-            'role' => ['in:seeker,employer,admin'],
+            'role' => ['in:seeker,company,admin'],
         ]);
 
         $user = User::create([
@@ -28,6 +30,14 @@ class AuthController extends Controller
 
         if ($user->role === 'seeker') {
             JobSeeker::create(['user_id' => $user->id]);
+        }
+        if ($user->role === 'company') {
+            $company = Company::create(['name' => $user->name . ' Company']);
+            CompanyUser::create([
+                'company_id' => $company->id,
+                'user_id' => $user->id,
+                'role' => 'owner',
+            ]);
         }
 
         $token = $user->createToken('api')->plainTextToken;

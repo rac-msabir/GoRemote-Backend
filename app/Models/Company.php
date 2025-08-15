@@ -21,4 +21,14 @@ class Company extends Model
     {
         return $this->hasMany(CompanySalary::class);
     }
+
+    public function users()
+    {
+        return $this->hasMany(CompanyUser::class);
+    }
+
+    public function jobs()
+    {
+        return $this->hasMany(Job::class);
+    }
 }

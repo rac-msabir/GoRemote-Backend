@@ -17,11 +17,12 @@ class JobController extends Controller
         $query = Job::query()
             ->select([
                 'jobs.*',
-                'employers.company_name as company_name',
-                'employers.website as employer_website',
+                DB::raw('COALESCE(companies.name, employers.company_name) as company_name'),
+                DB::raw('COALESCE(companies.website, employers.website) as employer_website'),
                 DB::raw('COALESCE(categories.name, NULL) as category_name'),
             ])
-            ->join('employers', 'employers.id', '=', 'jobs.employer_id')
+            ->leftJoin('employers', 'employers.id', '=', 'jobs.employer_id')
+            ->leftJoin('companies', 'companies.id', '=', 'jobs.company_id')
             ->leftJoin('categories', 'categories.id', '=', 'jobs.category_id')
             ->where('jobs.status', 'published');
 
@@ -229,15 +230,15 @@ class JobController extends Controller
     public function show(Job $job)
     {
         // Eager-load related data
-        $job->load(['employer','preferences','screeningQuestions']);
+        $job->load(['employer','company','preferences','screeningQuestions']);
 
         // Company details
         $company = [
-            'name' => optional($job->employer)->company_name,
+            'name' => optional($job->company)->name ?: optional($job->employer)->company_name,
             'location' => $job->location_type === 'remote'
                 ? 'Remote'
                 : trim(implode(', ', array_filter([$job->city, $job->state_province, $job->country_code]))),
-            'website' => optional($job->employer)->website,
+            'website' => optional($job->company)->website ?: optional($job->employer)->website,
         ];
 
         // Benefits (names)

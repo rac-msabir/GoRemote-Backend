@@ -13,14 +13,20 @@ class SavedJobController extends Controller
     {
         $seeker = JobSeeker::firstOrCreate(['user_id' => $request->user()->id]);
         $seeker->savedJobs()->syncWithoutDetaching([$job->id => ['created_at' => now()]]);
-        return response()->json(['saved' => true]);
+        return response()->json([
+            'message' => 'Job saved successfully',
+            'saved' => true,
+        ], 200);
     }
 
     public function destroy(Request $request, Job $job)
     {
         $seeker = JobSeeker::firstOrCreate(['user_id' => $request->user()->id]);
         $seeker->savedJobs()->detach($job->id);
-        return response()->json(['saved' => false]);
+        return response()->json([
+            'message' => 'Job unsaved successfully',
+            'saved' => false,
+        ], 200);
     }
 }
 
