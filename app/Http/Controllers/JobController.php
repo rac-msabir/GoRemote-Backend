@@ -13,20 +13,82 @@ class JobController extends Controller
     public function index(Request $request)
     {
         $perPage = max(1, (int) $request->query('per_page', 20));
+        $benefits = DB::table('job_benefits')
+            ->select('id', 'name')
+            ->orderBy('name')
+            ->get();
+        $categories = DB::table('categories')
+            ->select('id', 'name')
+            ->orderBy('name')
+            ->get();
+        $employers = DB::table('employers')
+            ->select('id', 'company_name')
+            ->orderBy('company_name')
+            ->get();
 
         $query = Job::query()
             ->select([
                 'jobs.*',
-                DB::raw('COALESCE(companies.name, employers.company_name) as company_name'),
-                DB::raw('COALESCE(companies.website, employers.website) as employer_website'),
-                DB::raw('COALESCE(categories.name, NULL) as category_name'),
+                'employers.company_name as company_name',
+                'employers.website as employer_website',
+                'categories.name as category_name', // null when no category
             ])
-            ->leftJoin('employers', 'employers.id', '=', 'jobs.employer_id')
-            ->leftJoin('companies', 'companies.id', '=', 'jobs.company_id')
+            ->leftJoin('employers', 'employers.id', '=', 'jobs.employer_id') // was INNER JOIN
             ->leftJoin('categories', 'categories.id', '=', 'jobs.category_id')
             ->where('jobs.status', 'published');
 
         // Filters
+        $expRaw = $request->input('experiencelevel');
+        if ($expRaw) {
+           
+            $label = Str::lower(trim($expRaw));
+            $pattern = null;
+
+            // Build MySQL REGEXP patterns against LOWER(jobs.description)
+            if (Str::startsWith($label, '0-1')) {
+                // 0 or 1 year, entry level, fresher, no experience
+                $pattern = implode('|', [
+                    '\b0-1\s*years?\b',
+                    '\b(?:0|zero|1|one)\s*(?:\+?\s*)?(?:years?|yrs?)\b',
+                    '\bno\s+experience\b',
+                    '\bentry[-\s]?level\b',
+                    '\bfresh(?:er)?\b',
+                ]);
+            } elseif (Str::startsWith($label, '2+')) {
+                // >= 2 years
+                $pattern = implode('|', [
+                    '\b(?:(?:[2-9]|[1-9][0-9]+))\s*\+?\s*(?:years?|yrs?)\b',
+                    '\b(?:two|three|four|five|six|seven|eight|nine|ten)\s*\+?\s*(?:years?|yrs?)\b',
+                    '\b(?:at\s+least|min(?:imum)?)\s*(?:2|two)\s*(?:years?|yrs?)\b',
+                ]);
+            } elseif (Str::startsWith($label, '3+')) {
+                // >= 3 years
+                $pattern = implode('|', [
+                    '\b(?:(?:[3-9]|[1-9][0-9]+))\s*\+?\s*(?:years?|yrs?)\b',
+                    '\b(?:three|four|five|six|seven|eight|nine|ten)\s*\+?\s*(?:years?|yrs?)\b',
+                    '\b(?:at\s+least|min(?:imum)?)\s*(?:3|three)\s*(?:years?|yrs?)\b',
+                ]);
+            } elseif (Str::startsWith($label, '5+')) {
+                // >= 5 years
+                $pattern = implode('|', [
+                    '\b(?:(?:[5-9]|[1-9][0-9]+))\s*\+?\s*(?:years?|yrs?)\b',
+                    '\b(?:five|six|seven|eight|nine|ten)\s*\+?\s*(?:years?|yrs?)\b',
+                    '\b(?:at\s+least|min(?:imum)?)\s*(?:5|five)\s*(?:years?|yrs?)\b',
+                ]);
+            } elseif (Str::startsWith($label, '10+')) {
+                // >= 10 years
+                $pattern = implode('|', [
+                    '\b(?:(?:1[0-9]|[2-9][0-9]+))\s*\+?\s*(?:years?|yrs?)\b',
+                    '\b(?:ten|eleven|twelve)\s*\+?\s*(?:years?|yrs?)\b',
+                    '\b(?:at\s+least|min(?:imum)?)\s*(?:10|ten)\s*(?:years?|yrs?)\b',
+                ]);
+            }
+
+            if ($pattern) {
+                $query->whereRaw('LOWER(jobs.description) REGEXP ?', [$pattern]);
+            }
+        }
+
         // search
         if ($search = $request->string('search')->toString()) {
             $query->where(function ($q) use ($search) {
@@ -35,25 +97,54 @@ class JobController extends Controller
             });
         }
 
-        // categories (slugs) - category, categories[], or CSV categories
-        $categorySlugs = [];
-        if ($slug = $request->string('category')->toString()) { $categorySlugs[] = $slug; }
-        $catInput = $request->input('categories', []);
-        if (is_string($catInput)) {
-            $catInput = array_filter(array_map('trim', explode(',', $catInput)));
-        }
-        $categorySlugs = array_merge($categorySlugs, is_array($catInput) ? $catInput : []);
-        if (!empty($categorySlugs)) {
-            $slugs = array_map(fn($v) => Str::slug($v), $categorySlugs);
-            $names = $categorySlugs;
-            $query->whereIn('jobs.category_id', function($sub) use ($slugs, $names) {
-                $sub->select('id')
-                    ->from('categories')
-                    ->where(function ($qq) use ($slugs, $names) {
-                        $qq->whereIn('slug', $slugs)
-                           ->orWhereIn('name', $names);
-                    });
+        // job types
+        if ($jobType = $request->string('jobtypes')->toString()) {
+            $query->where(function ($q) use ($jobType) {
+                $q->where('jobs.job_type', 'like', "%$jobType%");
             });
+        }
+
+        $benefitId = $request->integer('benefits');
+
+        if ($benefitId > 0) {
+            $query->whereExists(function ($sub) use ($benefitId) {
+                $sub->selectRaw(1)
+                    ->from('job_benefit_job as jb') 
+                    ->whereColumn('jb.job_id', 'jobs.id')
+                    ->where('jb.job_benefit_id', $benefitId);
+            });
+        }
+
+        // categories (slugs) - category, categories[], or CSV categories
+        // $categorySlugs = [];
+        // if ($slug = $request->string('category')->toString()) { $categorySlugs[] = $slug; }
+        // $catInput = $request->input('categories', []);
+        // if (is_string($catInput)) {
+        //     $catInput = array_filter(array_map('trim', explode(',', $catInput)));
+        // }
+        // $categorySlugs = array_merge($categorySlugs, is_array($catInput) ? $catInput : []);
+        // if (!empty($categorySlugs)) {
+        //     $slugs = array_map(fn($v) => Str::slug($v), $categorySlugs);
+        //     $names = $categorySlugs;
+        //     $query->whereIn('jobs.category_id', function($sub) use ($slugs, $names) {
+        //         $sub->select('id')
+        //             ->from('categories')
+        //             ->where(function ($qq) use ($slugs, $names) {
+        //                 $qq->whereIn('slug', $slugs)
+        //                    ->orWhereIn('name', $names);
+        //             });
+        //     });
+        // }
+
+        $categoryId = $request->integer('category'); // returns 0 if not present/invalid
+
+        if ($categoryId > 0) {
+            $query->where('jobs.category_id', $categoryId);
+        }
+        $employerId = $request->integer('company'); // returns 0 if not present/invalid
+        
+        if ($employerId > 0) {
+            $query->where('jobs.employer_id', $employerId);
         }
 
         // countries (codes or names) - country, countries[], or CSV countries
@@ -71,20 +162,37 @@ class JobController extends Controller
                   ->orWhereIn('jobs.country_name', $countries);
             });
         }
-        $salaryMin = $request->query('salary_min');
-        $salaryMax = $request->query('salary_max');
-        if (is_numeric($salaryMin)) {
-            $query->where(function ($q) use ($salaryMin) {
-                $q->whereNotNull('jobs.pay_max')
-                  ->where('jobs.pay_max', '>=', (float) $salaryMin);
+
+        // Salary filtering
+        $salary = $request->query('salary');
+        if ($salary && is_string($salary)) {
+            $query->where(function ($q) use ($salary) {
+                // Parse salary range from frontend format like "$50k - $80k", "$80k - $120k", "$120k - $180k", "$180k+"
+                $parsedRange = $this->parseSalaryRange($salary);
+                
+                if ($parsedRange) {
+                    $min = $parsedRange['min'];
+                    $max = $parsedRange['max'];
+                    
+                    if ($min && $max) {
+                        // Range: $50k - $80k -> find jobs that fit COMPLETELY within this range
+                        $q->where(function ($qq) use ($min, $max) {
+                            $qq->whereNotNull('jobs.pay_min')
+                                ->where('jobs.pay_min', '>=', $min * 1000) // Job min must be >= search min
+                                ->whereNotNull('jobs.pay_max')
+                                ->where('jobs.pay_max', '<=', $max * 1000); // Job max must be <= search max
+                        });
+                    } elseif ($min && !$max) {
+                        // $180k+ -> find jobs where pay_min >= 180k
+                        $q->where('jobs.pay_min', '>=', $min * 1000);
+                    } elseif (!$min && $max) {
+                        // Up to $80k -> find jobs where pay_max <= 80k
+                        $q->where('jobs.pay_max', '<=', $max * 1000);
+                    }
+                }
             });
         }
-        if (is_numeric($salaryMax)) {
-            $query->where(function ($q) use ($salaryMax) {
-                $q->whereNotNull('jobs.pay_min')
-                  ->where('jobs.pay_min', '<=', (float) $salaryMax);
-            });
-        }
+
         // skills by slug: skills[]= or comma-separated 'skills'
         $skillSlugs = $request->input('skills', []);
         if (is_string($skillSlugs)) {
@@ -104,70 +212,39 @@ class JobController extends Controller
             });
         }
 
-        // salary ranges - accept salary_min/salary_max OR salary_ranges[]/salary_range (strings like "$10,000 - $25,000 USD")
-        $applySalary = false;
-        $salaryMin = $request->query('salary_min');
-        $salaryMax = $request->query('salary_max');
-        $ranges = $request->input('salary_ranges', []);
-        if ($single = $request->input('salary_range')) { $ranges = array_merge((array) $ranges, (array) $single); }
-        if (!empty($ranges) && is_string($ranges)) { $ranges = [$ranges]; }
+        // posted_within
+        $datePostedRaw = $request->input('dateposted');
 
-        // Parse human range labels into numeric pairs
-        $parsedRanges = [];
-        foreach ((array) $ranges as $label) {
-            if (!is_string($label)) { continue; }
-            // Extract two numbers; ignore currency and commas
-            if (preg_match_all('/(\d[\d,]*)/', $label, $m) && count($m[1]) >= 1) {
-                $min = isset($m[1][0]) ? (float) str_replace(',', '', $m[1][0]) : null;
-                $max = isset($m[1][1]) ? (float) str_replace(',', '', $m[1][1]) : null;
-                if (!is_null($min) || !is_null($max)) {
-                    $parsedRanges[] = [$min, $max];
-                }
+        if ($datePostedRaw !== null && $datePostedRaw !== '' && Str::lower($datePostedRaw) !== 'any') {
+            $label = Str::of($datePostedRaw)->lower()->trim();
+
+            // Direct label/alias mapping
+            $from = match ((string) $label) {
+                'last 24 hours', '24h', '1d', '1 day' => now()->subDay(),
+                'last 7 days', '7d'                   => now()->subDays(7),
+                'last 30 days', '30d'                 => now()->subDays(30),
+                'last 2 months', '2m', 'last two months' => now()->subMonthsNoOverflow(2),
+                default => null,
+            };
+
+            // Fallback: parse "last {n} day(s)/month(s)"
+            if (!$from && preg_match('/last\s+(\d+)\s+(day|days|month|months|hour|hours)/i', (string) $datePostedRaw, $m)) {
+                $n = (int) $m[1];
+                $unit = Str::lower($m[2]);
+                $from = match ($unit) {
+                    'hour', 'hours'   => Carbon::now()->subHours($n),
+                    'day', 'days'     => Carbon::now()->subDays($n),
+                    'month', 'months' => Carbon::now()->subMonthsNoOverflow($n),
+                    default           => null,
+                };
+            }
+
+            if ($from) {
+                $query->where('jobs.posted_at', '>=', $from);
             }
         }
 
-        if (is_numeric($salaryMin) || is_numeric($salaryMax) || !empty($parsedRanges)) {
-            $query->where(function ($q) use ($salaryMin, $salaryMax, $parsedRanges) {
-                $clausesAdded = false;
-                if (is_numeric($salaryMin)) {
-                    $q->where(function ($qq) use ($salaryMin) {
-                        $qq->whereNotNull('jobs.pay_max')->where('jobs.pay_max', '>=', (float) $salaryMin);
-                    });
-                    $clausesAdded = true;
-                }
-                if (is_numeric($salaryMax)) {
-                    $q->where(function ($qq) use ($salaryMax) {
-                        $qq->whereNotNull('jobs.pay_min')->where('jobs.pay_min', '<=', (float) $salaryMax);
-                    });
-                    $clausesAdded = true;
-                }
-                if (!empty($parsedRanges)) {
-                    $q->where(function ($qq) use ($parsedRanges) {
-                        foreach ($parsedRanges as [$min, $max]) {
-                            $qq->orWhere(function ($or) use ($min, $max) {
-                                if (!is_null($min)) { $or->where('jobs.pay_max', '>=', $min); }
-                                if (!is_null($max)) { $or->where('jobs.pay_min', '<=', $max); }
-                            });
-                        }
-                    });
-                }
-            });
-        }
 
-        // posted_within
-        $postedWithin = $request->string('posted_within')->toString();
-        $withinDays = match ($postedWithin) {
-            '24h' => 1,
-            '3d' => 3,
-            '7d' => 7,
-            '14d', '2w', '2weeks' => 14,
-            '30d' => 30,
-            'any', '' => null,
-            default => null,
-        };
-        if ($withinDays) {
-            $query->where('jobs.posted_at', '>=', now()->subDays($withinDays));
-        }
 
         // Sorting
         $sort = $request->string('sort')->toString();
@@ -180,43 +257,67 @@ class JobController extends Controller
         $paginator = $query->paginate($perPage);
 
         $data = collect($paginator->items())->map(function ($job) {
-            $postedAt = $job->posted_at ?: $job->created_at;
+            // Load full job data for detailed response
+            $fullJob = Job::with(['employer','preferences','screeningQuestions'])->find($job->id);
+            
+            // Company details
+            $company = [
+                'name' => optional($fullJob->employer)->company_name ?? 'Unknown Company',
+                'location' => $fullJob->location_type === 'remote'
+                    ? 'Remote'
+                    : (trim(implode(', ', array_filter([$fullJob->city, $fullJob->state_province, $fullJob->country_code]))) ?: $fullJob->country_code),
+                'website' => optional($fullJob->employer)->website,
+            ];
+
+            // Benefits (names)
+            $benefits = DB::table('job_benefit_job')
+                ->join('job_benefits', 'job_benefits.id', '=', 'job_benefit_job.job_benefit_id')
+                ->where('job_benefit_job.job_id', $fullJob->id)
+                ->pluck('job_benefits.name')
+                ->all();
+
+            $postedAt = $fullJob->posted_at ?: $fullJob->created_at;
             $isNew = $postedAt ? Carbon::parse($postedAt)->greaterThanOrEqualTo(now()->subDays(7)) : false;
-            $isFeatured = ($job->pay_max && $job->pay_max >= 150000) || ($isNew && $job->job_type === 'full_time');
-
-            $location = $job->location_type === 'remote'
-                ? 'Remote'
-                : trim(implode(', ', array_filter([$job->city, $job->state_province, $job->country_code])));
-
+            $isFeatured = ($fullJob->pay_max && $fullJob->pay_max >= 150000) || ($isNew && $fullJob->job_type === 'full_time');
+            
             $tags = [];
             if ($isFeatured) { $tags[] = 'Featured'; }
-            if ($job->job_type) { $tags[] = self::humanizeJobType($job->job_type); }
-            if ($job->location_type === 'remote') { $tags[] = 'Remote'; }
-
-            $salaryRange = self::composeSalaryRange(
-                $job->pay_visibility,
-                $job->pay_min,
-                $job->pay_max,
-                $job->currency,
-            );
+            if ($fullJob->job_type) { $tags[] = self::humanizeJobType($fullJob->job_type); }
+            if ($fullJob->location_type === 'remote') { $tags[] = 'Remote'; }
+          
+            $salaryRange = null;
+            if ($fullJob->pay_min || $fullJob->pay_max) {
+                $fmt = fn ($v) => is_null($v) ? null : ('$'.number_format((float)$v/1000, 0).'k');
+                $min = $fmt($fullJob->pay_min);
+                $max = $fmt($fullJob->pay_max);
+                $salaryRange = $min && $max ? "$min - $max" : ($min ?: $max);
+            }
+            
 
             return [
-                'id' => (int) $job->id,
-                'title' => $job->title,
-                'company_name' => $job->company_name,
-                'location' => $location ?: 'Anywhere in the World',
-                'tags' => $tags,
-                'job_type' => self::humanizeJobType($job->job_type),
-                'category_name' => $job->category_name,
+                'id' => (int) $fullJob->id,
+                'title' => $fullJob->title,
+                'company' => $company,
+                'job_type' => self::humanizeJobType($fullJob->job_type),
                 'salary_range' => $salaryRange,
+                'tags' => $tags,
                 'is_featured' => (bool) $isFeatured,
                 'is_new' => (bool) $isNew,
-                'created_at' => optional($postedAt)->toISOString() ?? null,
+                'posted_at' => optional($postedAt)->toISOString() ?? null,
+                'description' => (string) $fullJob->description,
+                'overview' => $this->generateOverviewFromDescription($fullJob->description),
+                'requirements' => $this->generateRequirementsFromDescription($fullJob->description),
+                'responsibilities' => $this->generateResponsibilitiesFromDescription($fullJob->description),
+                'benefits' => $benefits,
+                'application_link' => $company['website'] ?: null,
             ];
-        })->all();
+        })->all();  
 
         $response = [
             'data' => $data,
+            'benefits' => $benefits,
+            'categories' => $categories,
+            'employers' => $employers,
             'pagination' => [
                 'current_page' => $paginator->currentPage(),
                 'total_pages' => $paginator->lastPage(),
@@ -230,15 +331,15 @@ class JobController extends Controller
     public function show(Job $job)
     {
         // Eager-load related data
-        $job->load(['employer','company','preferences','screeningQuestions']);
+        $job->load(['employer','preferences','screeningQuestions']);
 
         // Company details
         $company = [
-            'name' => optional($job->company)->name ?: optional($job->employer)->company_name,
+            'name' => optional($job->employer)->company_name,
             'location' => $job->location_type === 'remote'
                 ? 'Remote'
                 : trim(implode(', ', array_filter([$job->city, $job->state_province, $job->country_code]))),
-            'website' => optional($job->company)->website ?: optional($job->employer)->website,
+            'website' => optional($job->employer)->website,
         ];
 
         // Benefits (names)
@@ -276,6 +377,7 @@ class JobController extends Controller
             'is_new' => (bool) $isNew,
             'posted_at' => optional($postedAt)->toISOString() ?? null,
             'description' => (string) $job->description,
+            'overview' => $this->generateOverviewFromDescription($job->description),
             'requirements' => $this->generateRequirementsFromDescription($job->description),
             'responsibilities' => $this->generateResponsibilitiesFromDescription($job->description),
             'benefits' => $benefits,
@@ -318,6 +420,15 @@ class JobController extends Controller
         };
     }
 
+    private function generateOverviewFromDescription(?string $description): string
+    {
+        if (!$description) { return ''; }
+        // Take first 2-3 sentences as overview
+        $sentences = preg_split('/\.(\s+|$)/', $description, -1, PREG_SPLIT_NO_EMPTY);
+        $overviewSentences = array_slice($sentences, 0, 3);
+        return implode('. ', $overviewSentences) . '.';
+    }
+
     private function generateRequirementsFromDescription(?string $description): array
     {
         if (!$description) { return []; }
@@ -331,6 +442,41 @@ class JobController extends Controller
         if (!$description) { return []; }
         $sentences = preg_split('/\.(\s+|$)/', $description, -1, PREG_SPLIT_NO_EMPTY);
         return array_map(fn ($s) => trim($s), array_slice($sentences, 5, 5));
+    }
+
+    /**
+     * Parse salary range from frontend format like "$50k - $80k", "$180k+"
+     */
+    private function parseSalaryRange(string $salary): ?array
+    {
+        // Remove currency symbols and spaces
+        $clean = preg_replace('/[\$\s]/', '', $salary);
+        
+        // Handle range format: "50k-80k" or "50k - 80k"
+        if (preg_match('/^(\d+)k\s*-\s*(\d+)k$/i', $clean, $matches)) {
+            return [
+                'min' => (int) $matches[1],
+                'max' => (int) $matches[2]
+            ];
+        }
+        
+        // Handle "180k+" format
+        if (preg_match('/^(\d+)k\+$/i', $clean, $matches)) {
+            return [
+                'min' => (int) $matches[1],
+                'max' => null
+            ];
+        }
+        
+        // Handle single value: "80k"
+        if (preg_match('/^(\d+)k$/i', $clean, $matches)) {
+            return [
+                'min' => null,
+                'max' => (int) $matches[1]
+            ];
+        }
+        
+        return null;
     }
 }
 

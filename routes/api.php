@@ -25,15 +25,7 @@ Route::post('/jobs/{job}/save', [\App\Http\Controllers\Seeker\SavedJobController
 Route::delete('/jobs/{job}/save', [\App\Http\Controllers\Seeker\SavedJobController::class, 'destroy'])->middleware('auth:sanctum');
 Route::post('/jobs/{job}/apply', [\App\Http\Controllers\ApplicationController::class, 'apply'])->middleware('auth:sanctum');
 
-// Companies (job posting)
-Route::middleware(['auth:sanctum', 'role:company'])->group(function () {
-    Route::post('/companies/jobs', [\App\Http\Controllers\Company\JobPostingController::class, 'store']);
-    Route::put('/companies/jobs/{job}', [\App\Http\Controllers\Company\JobPostingController::class, 'update']);
-    Route::post('/companies/jobs/{job}/publish', [\App\Http\Controllers\Company\JobPostingController::class, 'publish']);
-    Route::post('/companies/jobs/{job}/close', [\App\Http\Controllers\Company\JobPostingController::class, 'close']);
-    Route::get('/companies/candidates', [\App\Http\Controllers\Company\CandidateController::class, 'index']);
-    Route::put('/applications/{application}/status', [\App\Http\Controllers\Company\CandidateController::class, 'updateStatus']);
-});
+
 
 // Companies
 Route::get('/companies', [\App\Http\Controllers\CompanyController::class, 'index']);
