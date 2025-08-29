@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Auth;
+use App\Models\JobSeeker;
 
 class JobController extends Controller
 {
@@ -141,11 +143,7 @@ class JobController extends Controller
         if ($categoryId > 0) {
             $query->where('jobs.category_id', $categoryId);
         }
-        $employerId = $request->integer('company'); // returns 0 if not present/invalid
         
-        if ($employerId > 0) {
-            $query->where('jobs.employer_id', $employerId);
-        }
 
         // countries (codes or names) - country, countries[], or CSV countries
         $countries = [];
@@ -244,7 +242,11 @@ class JobController extends Controller
             }
         }
 
-
+        $employerId = $request->integer('company'); // returns 0 if not present/invalid
+        
+        if ($employerId > 0) {
+            $query->where('jobs.employer_id', $employerId);
+        }
 
         // Sorting
         $sort = $request->string('sort')->toString();
@@ -256,7 +258,35 @@ class JobController extends Controller
 
         $paginator = $query->paginate($perPage);
 
-        $data = collect($paginator->items())->map(function ($job) {
+        //check job status if applied by auth user
+            $userId = Auth::guard('sanctum')->id();
+            $jobIds = collect($paginator->items())->pluck('id')->all();
+            $appByJob = collect();
+            if ($userId && !empty($jobIds)) {
+                // Grab the latest application per job for this user
+                $appByJob = DB::table('job_applications as ja')
+                    ->select('ja.job_id', 'ja.job_seeker_id', 'ja.created_at')
+                    ->where('ja.job_seeker_id', $userId)
+                    ->whereIn('ja.job_id', $jobIds)
+                    ->orderBy('ja.created_at', 'desc')
+                    ->get()
+                    ->groupBy('job_id')
+                    ->map->first(); // keep only the latest row per job_id
+            }
+
+            //saved job
+            $seekerId = JobSeeker::where('user_id', $userId)->value('id');
+            $savedByJob = collect();
+            if ($userId && !empty($jobIds)) {
+                $savedByJob = DB::table('saved_jobs as sj')
+                    ->select('sj.job_id')
+                    ->where('sj.job_seeker_id', $seekerId) // <-- adjust if your FK differs
+                    ->whereIn('sj.job_id', $jobIds)
+                    ->get()
+                    ->keyBy('job_id'); // existence = saved
+            }   
+        
+        $data = collect($paginator->items())->map(function ($job) use ($appByJob,$savedByJob){
             // Load full job data for detailed response
             $fullJob = Job::with(['employer','preferences','screeningQuestions'])->find($job->id);
             
@@ -292,8 +322,10 @@ class JobController extends Controller
                 $max = $fmt($fullJob->pay_max);
                 $salaryRange = $min && $max ? "$min - $max" : ($min ?: $max);
             }
-            
-
+          
+            $app = $appByJob->get($fullJob->id);
+            $saved = $savedByJob->get($fullJob->id);
+          
             return [
                 'id' => (int) $fullJob->id,
                 'title' => $fullJob->title,
@@ -310,6 +342,8 @@ class JobController extends Controller
                 'responsibilities' => $this->generateResponsibilitiesFromDescription($fullJob->description),
                 'benefits' => $benefits,
                 'application_link' => $company['website'] ?: null,
+                'has_applied'        => (bool) $app,
+                'is_saved' => (bool) $saved,
             ];
         })->all();  
 

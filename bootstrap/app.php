@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Middleware\HandleCors; 
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -12,6 +13,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Add CORS middleware globally
+        $middleware->use([
+            HandleCors::class, // <-- enables CORS handling for API routes
+        ]);
+
+        // your existing aliases
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
         ]);
