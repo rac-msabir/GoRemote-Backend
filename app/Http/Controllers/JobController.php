@@ -307,6 +307,7 @@ class JobController extends Controller
                 ->all();
 
             $postedAt = $fullJob->posted_at ?: $fullJob->created_at;
+            $closedAt = $fullJob->closed_at;
             $isNew = $postedAt ? Carbon::parse($postedAt)->greaterThanOrEqualTo(now()->subDays(7)) : false;
             $isFeatured = ($fullJob->pay_max && $fullJob->pay_max >= 150000) || ($isNew && $fullJob->job_type === 'full_time');
             
@@ -330,12 +331,14 @@ class JobController extends Controller
                 'id' => (int) $fullJob->id,
                 'title' => $fullJob->title,
                 'company' => $company,
+                'vacancies' => $fullJob->vacancies,
                 'job_type' => self::humanizeJobType($fullJob->job_type),
                 'salary_range' => $salaryRange,
                 'tags' => $tags,
                 'is_featured' => (bool) $isFeatured,
                 'is_new' => (bool) $isNew,
                 'posted_at' => optional($postedAt)->toISOString() ?? null,
+                'closed_at' => optional($closedAt)->toISOString() ?? null,
                 'description' => (string) $fullJob->description,
                 'overview' => $this->generateOverviewFromDescription($fullJob->description),
                 'requirements' => $this->generateRequirementsFromDescription($fullJob->description),
@@ -362,7 +365,7 @@ class JobController extends Controller
         return response()->json($response);
     }
 
-    public function show(Job $job)
+   public function show(Job $job)
     {
         // Eager-load related data
         $job->load(['employer','preferences','screeningQuestions']);
@@ -384,6 +387,7 @@ class JobController extends Controller
             ->all();
 
         $postedAt = $job->posted_at ?: $job->created_at;
+        $closedAt = $job->closed_at;
         $isNew = $postedAt ? Carbon::parse($postedAt)->greaterThanOrEqualTo(now()->subDays(7)) : false;
         $isFeatured = ($job->pay_max && $job->pay_max >= 150000) || ($isNew && $job->job_type === 'full_time');
 
@@ -400,22 +404,51 @@ class JobController extends Controller
             $salaryRange = $min && $max ? "$min - $max" : ($min ?: $max);
         }
 
+        // ---> New bits (keep consistent with index):
+        $userId = Auth::guard('sanctum')->id();
+        $app = false;
+        $saved = false;
+
+        if ($userId) {
+            // If your job_applications table stores job_seeker_id = USER id, this matches your index() logic.
+            // If it actually stores the seeker PK, switch $userId to $seekerId below.
+            $app = DB::table('job_applications as ja')
+                ->where('ja.job_id', $job->id)
+                ->where('ja.job_seeker_id', $userId)
+                ->exists();
+
+            $seekerId = JobSeeker::where('user_id', $userId)->value('id');
+            
+            if ($seekerId) {
+                $saved = DB::table('saved_jobs as sj')
+                    ->where('sj.job_seeker_id', $seekerId)
+                    ->where('sj.job_id', $job->id)
+                    ->exists();
+            }
+        }
+        // <--- end new bits
+
         $response = [
             'id' => (int) $job->id,
             'title' => $job->title,
             'company' => $company,
+            'vacancies' => $job->vacancies,                       // NEW
             'job_type' => self::humanizeJobType($job->job_type),
             'salary_range' => $salaryRange,
             'tags' => $tags,
             'is_featured' => (bool) $isFeatured,
             'is_new' => (bool) $isNew,
             'posted_at' => optional($postedAt)->toISOString() ?? null,
+            'closed_at' => optional($closedAt)->toISOString() ?? null,  // NEW
             'description' => (string) $job->description,
             'overview' => $this->generateOverviewFromDescription($job->description),
             'requirements' => $this->generateRequirementsFromDescription($job->description),
             'responsibilities' => $this->generateResponsibilitiesFromDescription($job->description),
             'benefits' => $benefits,
             'application_link' => $company['website'] ?: null,
+            'has_applied' => (bool) $app,                         // NEW
+            'is_saved' => (bool) $saved,                          // NEW
+            
         ];
 
         return response()->json($response);

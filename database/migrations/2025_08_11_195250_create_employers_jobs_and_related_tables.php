@@ -47,6 +47,7 @@ return new class extends Migration
             $table->decimal('pay_max', 12, 2)->nullable();
             $table->enum('pay_period', ['hour','day','week','month','year'])->nullable();
             $table->enum('status', ['draft','published','closed'])->default('draft')->index();
+            $table->integer('vacancies')->default(1);
             $table->timestamp('posted_at')->nullable();
             $table->timestamp('closed_at')->nullable();
             $table->timestamps();
