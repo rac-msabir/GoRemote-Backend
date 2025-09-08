@@ -36,7 +36,7 @@ class EmployerSeeder extends Seeder
         $payPeriods = ['hour','day','week','month','year'];
 
         // Create Employers with Employer Users and Jobs
-        for ($i = 0; $i < 100; $i++) {
+        for ($i = 0; $i < 5; $i++) {
             $employer = Employer::create([
                 'company_name' => fake()->company(),
                 'website' => fake()->optional()->url(),
