@@ -24,7 +24,7 @@ Route::get('/jobs/{job}', [\App\Http\Controllers\JobController::class, 'show']);
 Route::post('/jobs/{job}/save', [\App\Http\Controllers\Seeker\SavedJobController::class, 'store'])->middleware('auth:sanctum');
 Route::delete('/jobs/{job}/save', [\App\Http\Controllers\Seeker\SavedJobController::class, 'destroy'])->middleware('auth:sanctum');
 Route::post('/jobs/{job}/apply', [\App\Http\Controllers\JobApplicationController::class, 'apply'])->middleware('auth:sanctum');
-
+Route::get('/stats/hero', [\App\Http\Controllers\JobController::class, 'statsHero']);
 
 
 // Companies
