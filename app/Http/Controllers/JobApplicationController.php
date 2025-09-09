@@ -137,8 +137,8 @@ class JobApplicationController extends Controller
 
             // Log the application
             \Log::info('Job application submitted', [
-                'job_id' => $job->id,
-                'job_application_id' => $application->id,
+                'job_id' => $job->uuid,
+                'job_application_id' => $application->uuid,
                 'job_seeker_id' => $jobSeekerId,
                 'email' => $validated['email'],
             ]);
@@ -148,8 +148,8 @@ class JobApplicationController extends Controller
                 'success' => true,
                 'message' => 'Job application submitted successfully.',
                 'data' => [
-                    'id' => $application->id,
-                    'job_id' => $job->id,
+                    'id' => $application->uuid,
+                    'job_id' => $job->uuid,
                     'job_seeker_id' => $jobSeekerId,
                     'resume_url' => $application->resume_url,
                 ]
@@ -165,7 +165,7 @@ class JobApplicationController extends Controller
             }
 
             \Log::error('Job application failed', [
-                'job_id' => $job->id,
+                'job_id' => $job->uuid,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 class Job extends Model
 {
@@ -12,13 +13,35 @@ class Job extends Model
 
     protected $fillable = [
         'employer_id','category_id','title','slug','description','location_type','city','state_province','country_code','country_name','location',
-        'job_type','pay_visibility','pay_min','pay_max','currency','pay_period','status','is_featured','is_pinned','posted_at','closed_at',
+        'job_type','pay_visibility','pay_min','pay_max','currency','pay_period','status','is_featured','is_pinned','posted_at','closed_at','uuid',
     ];
 
     protected $casts = [
         'posted_at' => 'datetime',
         'closed_at' => 'datetime',
     ];
+
+    /**
+     * Boot the model.
+     */
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            if (empty($model->uuid)) {
+                $model->uuid = Str::uuid()->toString();
+            }
+        });
+    }
+
+    /**
+     * Get the route key for the model.
+     */
+    public function getRouteKeyName(): string
+    {
+        return 'uuid';
+    }
 
     public function employer()
     {

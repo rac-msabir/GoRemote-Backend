@@ -311,7 +311,7 @@ class JobController extends Controller
             $benef = $benefitsByJob->get($row->id, []);
 
             return [
-                'id'              => (int) $row->id,
+                'id'              => $row->uuid,
                 'title'           => $row->title,
                 'company'         => $company,
                 'vacancies'       => $row->vacancies,
@@ -411,7 +411,7 @@ class JobController extends Controller
         // <--- end new bits
 
         $response = [
-            'id' => (int) $job->id,
+            'id' => $job->uuid,
             'title' => $job->title,
             'company' => $company,
             'vacancies' => $job->vacancies,                       // NEW
