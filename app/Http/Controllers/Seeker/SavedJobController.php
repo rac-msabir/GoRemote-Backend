@@ -3,7 +3,11 @@
 namespace App\Http\Controllers\Seeker;
 
 use App\Http\Controllers\Controller;
+use Auth;
+use DB;
+use Carbon\Carbon;
 use App\Models\Job;
+use App\Models\SavedJob;
 use App\Models\JobSeeker;
 use Illuminate\Http\Request;
 

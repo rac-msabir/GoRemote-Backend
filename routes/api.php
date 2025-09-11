@@ -21,10 +21,15 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::get('/jobs', [\App\Http\Controllers\JobController::class, 'index']);
 Route::get('/jobs/filter', [\App\Http\Controllers\JobController::class, 'index']);
 Route::get('/jobs/{job}', [\App\Http\Controllers\JobController::class, 'show']);
+Route::get('/stats/hero', [\App\Http\Controllers\JobController::class, 'statsHero']);
+Route::get('/get-saved-jobs', [\App\Http\Controllers\JobController::class, 'getSavedJobs'])->middleware('auth:sanctum');
+
 Route::post('/jobs/{job}/save', [\App\Http\Controllers\Seeker\SavedJobController::class, 'store'])->middleware('auth:sanctum');
 Route::delete('/jobs/{job}/save', [\App\Http\Controllers\Seeker\SavedJobController::class, 'destroy'])->middleware('auth:sanctum');
+
+
 Route::post('/jobs/{job}/apply', [\App\Http\Controllers\JobApplicationController::class, 'apply'])->middleware('auth:sanctum');
-Route::get('/stats/hero', [\App\Http\Controllers\JobController::class, 'statsHero']);
+
 
 
 // Companies
