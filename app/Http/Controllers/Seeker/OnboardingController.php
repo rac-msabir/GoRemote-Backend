@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Seeker;
 
 use App\Http\Controllers\Controller;
 use App\Models\JobSeeker;
+use App\Models\User;
 use App\Models\SeekerDesiredTitle;
 use Illuminate\Http\Request;
 
@@ -53,6 +54,23 @@ class OnboardingController extends Controller
             ]);
         }
         return response()->json($seeker->load('desiredTitles'));
+    }
+
+    public function findSeeker(Request $request)
+    {
+       $seekers = User::with([
+        'profile',
+        'jobSeeker.desiredTitles' => function ($q) {
+            $q->orderBy('priority', 'asc');
+        }
+        ])
+        ->where('role', 'seeker')
+        ->paginate(10);
+
+        return response()->json([
+            'status' => 'success',
+            'data'   => $seekers
+        ]);
     }
 }
 

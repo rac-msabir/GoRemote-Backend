@@ -35,6 +35,24 @@ class JobSeekerSeeder extends Seeder
                 'min_pay_period' => fake()->optional()->randomElement(['year','month','week','day','hour']),
             ]);
 
+            // ✅ User Profile
+            \App\Models\UserProfile::create([
+                'user_id' => $user->id,
+                'phone' => fake()->optional()->phoneNumber(),
+                'linkedin_url' => fake()->optional()->url(),
+                'website' => fake()->optional()->url(),
+                'bio' => fake()->sentence(12),
+                'country' => fake()->country(),
+                'province' => fake()->optional()->state(),
+                'city' => fake()->city(),
+                'zip' => fake()->postcode(),
+                'address' => fake()->address(),
+                'current_title' => fake()->jobTitle(),
+                'current_company' => fake()->company(),
+                'years_of_experience' => fake()->numberBetween(1, 15),
+                'resume_path' => 'resumes/'.fake()->uuid().'.pdf',
+            ]);
+
             // Desired titles
             $desiredCount = rand(1, 3);
             for ($t = 0; $t < $desiredCount; $t++) {

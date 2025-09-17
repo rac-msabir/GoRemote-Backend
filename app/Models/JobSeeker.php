@@ -40,4 +40,9 @@ class JobSeeker extends Model
     {
         return $this->belongsToMany(Job::class, 'saved_jobs', 'job_seeker_id', 'job_id');
     }
+
+    public function jobSeeker()
+    {
+        return $this->belongsTo(JobSeeker::class);
+    }
 }

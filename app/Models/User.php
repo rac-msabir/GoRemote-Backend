@@ -91,4 +91,29 @@ class User extends Authenticatable
         return $this->belongsToMany(Job::class, 'saved_jobs', 'job_seeker_id', 'job_id')
                     ->withTimestamps();
     }
+
+    public function profile()
+    {
+        return $this->hasOne(UserProfile::class);
+    }
+
+    public function jobSeeker()
+    {
+        return $this->hasOne(JobSeeker::class);
+    }
+
+    public function desiredTitles()
+    {
+        return $this->hasMany(SeekerDesiredTitle::class, 'job_seeker_id');
+    }
+
+    public function experiences()
+    {
+        return $this->hasMany(UserExperience::class);
+    }
+
+    public function educations()
+    {
+        return $this->hasMany(UserEducation::class);
+    }
 }

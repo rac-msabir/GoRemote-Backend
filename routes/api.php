@@ -16,6 +16,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/seeker/resumes', [\App\Http\Controllers\Seeker\ResumeController::class, 'store']);
     Route::get('/seeker/resumes', [\App\Http\Controllers\Seeker\ResumeController::class, 'index']);
 });
+Route::get('/find-seekers', [\App\Http\Controllers\Seeker\OnboardingController::class, 'findSeeker']);
 
 // Jobs browsing (public + authed)
 Route::get('/jobs', [\App\Http\Controllers\JobController::class, 'index']);
@@ -23,6 +24,7 @@ Route::get('/jobs/filter', [\App\Http\Controllers\JobController::class, 'index']
 Route::get('/jobs/{job}', [\App\Http\Controllers\JobController::class, 'show']);
 Route::get('/stats/hero', [\App\Http\Controllers\JobController::class, 'statsHero']);
 Route::get('/get-saved-jobs', [\App\Http\Controllers\JobController::class, 'getSavedJobs'])->middleware('auth:sanctum');
+
 
 Route::post('/jobs/{job}/save', [\App\Http\Controllers\Seeker\SavedJobController::class, 'store'])->middleware('auth:sanctum');
 Route::delete('/jobs/{job}/save', [\App\Http\Controllers\Seeker\SavedJobController::class, 'destroy'])->middleware('auth:sanctum');
