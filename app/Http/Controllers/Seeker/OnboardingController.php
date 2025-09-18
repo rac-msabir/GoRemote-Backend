@@ -54,24 +54,8 @@ class OnboardingController extends Controller
             ]);
         }
         return response()->json($seeker->load('desiredTitles'));
-    }
+    }  
 
-    public function findSeeker(Request $request)
-    {
-       $seekers = User::with([
-        'profile',
-        'jobSeeker.desiredTitles' => function ($q) {
-            $q->orderBy('priority', 'asc');
-        }
-        ])
-        ->where('role', 'seeker')
-        ->paginate(10);
-
-        return response()->json([
-            'status' => 'success',
-            'data'   => $seekers
-        ]);
-    }
 }
 
 

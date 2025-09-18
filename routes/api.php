@@ -16,7 +16,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/seeker/resumes', [\App\Http\Controllers\Seeker\ResumeController::class, 'store']);
     Route::get('/seeker/resumes', [\App\Http\Controllers\Seeker\ResumeController::class, 'index']);
 });
-Route::get('/find-seekers', [\App\Http\Controllers\Seeker\OnboardingController::class, 'findSeeker']);
+Route::get('/find-seekers', [\App\Http\Controllers\Seeker\UserController::class, 'findSeeker']);
 
 // Jobs browsing (public + authed)
 Route::get('/jobs', [\App\Http\Controllers\JobController::class, 'index']);
