@@ -364,94 +364,137 @@ class JobController extends Controller
     }
 
 
-   public function show(Job $job)
+   public function show($jobId)
     {
-        // Eager-load related data
-        $job->load(['employer','preferences','screeningQuestions']);
+        try {
+            // Find job by ID/UUID
+            $job = Job::with(['employer','preferences','screeningQuestions'])
+                    ->where('uuid', $jobId)
+                    ->first();
 
-        // Company details
-        $company = [
-            'name' => optional($job->employer)->company_name,
-            'location' => $job->location_type === 'remote'
-                ? 'Remote'
-                : trim(implode(', ', array_filter([$job->city, $job->state_province, $job->country_code]))),
-            'website' => optional($job->employer)->website,
-        ];
-
-        // Benefits (names)
-        $benefits = DB::table('job_benefit_job')
-            ->join('job_benefits', 'job_benefits.id', '=', 'job_benefit_job.job_benefit_id')
-            ->where('job_benefit_job.job_id', $job->id)
-            ->pluck('job_benefits.name')
-            ->all();
-
-        $postedAt = $job->posted_at ?: $job->created_at;
-        $closedAt = $job->closed_at;
-        $isNew = $postedAt ? Carbon::parse($postedAt)->greaterThanOrEqualTo(now()->subDays(7)) : false;
-        $isFeatured = ($job->pay_max && $job->pay_max >= 150000) || ($isNew && $job->job_type === 'full_time');
-
-        $tags = [];
-        if ($isFeatured) { $tags[] = 'Featured'; }
-        if ($job->job_type) { $tags[] = self::humanizeJobType($job->job_type); }
-        if ($job->location_type === 'remote') { $tags[] = 'Remote'; }
-
-        $salaryRange = null;
-        if ($job->pay_min || $job->pay_max) {
-            $fmt = fn ($v) => is_null($v) ? null : ('$'.number_format((float)$v/1000, 0).'k');
-            $min = $fmt($job->pay_min);
-            $max = $fmt($job->pay_max);
-            $salaryRange = $min && $max ? "$min - $max" : ($min ?: $max);
-        }
-
-        // ---> New bits (keep consistent with index):
-        $userId = Auth::guard('sanctum')->id();
-        $app = false;
-        $saved = false;
-
-        if ($userId) {
-            // If your job_applications table stores job_seeker_id = USER id, this matches your index() logic.
-            // If it actually stores the seeker PK, switch $userId to $seekerId below.
-            $app = DB::table('job_applications as ja')
-                ->where('ja.job_id', $job->id)
-                ->where('ja.job_seeker_id', $userId)
-                ->exists();
-
-            $seekerId = JobSeeker::where('user_id', $userId)->value('id');
-            
-            if ($seekerId) {
-                $saved = DB::table('saved_jobs as sj')
-                    ->where('sj.job_seeker_id', $seekerId)
-                    ->where('sj.job_id', $job->id)
-                    ->exists();
+            if (!$job) {
+                // Job not found → return null in data
+                return response()->json([
+                    'status_code' => 200,
+                    'error' => true,
+                    'errorMessage' => null,
+                    'data' => null,
+                ], 200);
             }
+
+            // Company details
+            $company = [
+                'name' => optional($job->employer)->company_name,
+                'location' => $job->location_type === 'remote'
+                    ? 'Remote'
+                    : trim(implode(', ', array_filter([$job->city, $job->state_province, $job->country_code]))),
+                'website' => optional($job->employer)->website,
+            ];
+
+            // Benefits (names)
+            $benefits = DB::table('job_benefit_job')
+                ->join('job_benefits', 'job_benefits.id', '=', 'job_benefit_job.job_benefit_id')
+                ->where('job_benefit_job.job_id', $job->id)
+                ->pluck('job_benefits.name')
+                ->all();
+
+            // Dates
+            $postedAt = $job->posted_at ?: $job->created_at;
+            $closedAt = $job->closed_at;
+
+            // Flags
+            $isNew = $postedAt ? Carbon::parse($postedAt)->greaterThanOrEqualTo(now()->subDays(7)) : false;
+            $isFeatured = ($job->pay_max && $job->pay_max >= 150000) || ($isNew && $job->job_type === 'full_time');
+
+            // Tags
+            $tags = [];
+            if ($isFeatured) $tags[] = 'Featured';
+            if ($job->job_type) $tags[] = self::humanizeJobType($job->job_type);
+            if ($job->location_type === 'remote') $tags[] = 'Remote';
+
+            // Salary
+            $salaryRange = null;
+            if ($job->pay_min || $job->pay_max) {
+                $fmt = fn ($v) => is_null($v) ? null : ('$'.number_format((float)$v/1000, 0).'k');
+                $min = $fmt($job->pay_min);
+                $max = $fmt($job->pay_max);
+                $salaryRange = $min && $max ? "$min - $max" : ($min ?: $max);
+            }
+
+            // User-related info
+            $userId = Auth::guard('sanctum')->id();
+            $hasApplied = false;
+            $isSaved = false;
+
+            if ($userId) {
+                $hasApplied = DB::table('job_applications')
+                    ->where('job_id', $job->id)
+                    ->where('job_seeker_id', $userId)
+                    ->exists();
+
+                $seekerId = JobSeeker::where('user_id', $userId)->value('id');
+                if ($seekerId) {
+                    $isSaved = DB::table('saved_jobs')
+                        ->where('job_seeker_id', $seekerId)
+                        ->where('job_id', $job->id)
+                        ->exists();
+                }
+            }
+
+            // Build job data
+            $data = [
+                'id' => $job->uuid,
+                'title' => $job->title,
+                'company' => $company,
+                'vacancies' => $job->vacancies,
+                'job_type' => self::humanizeJobType($job->job_type),
+                'salary_range' => $salaryRange,
+                'tags' => $tags,
+                'is_featured' => (bool) $isFeatured,
+                'is_new' => (bool) $isNew,
+                'posted_at' => optional($postedAt)?->toISOString(),
+                'closed_at' => optional($closedAt)?->toISOString(),
+                'description' => (string) $job->description,
+                'overview' => $this->generateOverviewFromDescription($job->description),
+                'requirements' => $this->generateRequirementsFromDescription($job->description),
+                'responsibilities' => $this->generateResponsibilitiesFromDescription($job->description),
+                'benefits' => $benefits,
+                'application_link' => $company['website'] ?: null,
+                'has_applied' => $hasApplied,
+                'is_saved' => $isSaved,
+            ];
+
+            // Example lists
+            $benefitsList = DB::table('job_benefits')->pluck('name')->all();
+            $categories = DB::table('categories')->pluck('name')->all();
+            $employersList = DB::table('employers')->pluck('company_name')->all();
+
+            $response = [
+                'status_code' => 200,
+                'error' => false,
+                'errorMessage' => null,
+                'data' => [
+                    'jobs' => $data,
+                    'benefits' => $benefitsList,
+                    'categories' => $categories,
+                    'employers' => $employersList,
+                    'pagination' => null, // single job
+                ],
+            ];
+
+            return response()->json($response, 200);
+
+        } catch (\Throwable $e) {
+            return response()->json([
+                'status_code' => 500,
+                'error' => true,
+                'errorMessage' => $e->getMessage(),
+                'data' => null,
+            ], 500);
         }
-        // <--- end new bits
-
-        $response = [
-            'id' => $job->uuid,
-            'title' => $job->title,
-            'company' => $company,
-            'vacancies' => $job->vacancies,                       // NEW
-            'job_type' => self::humanizeJobType($job->job_type),
-            'salary_range' => $salaryRange,
-            'tags' => $tags,
-            'is_featured' => (bool) $isFeatured,
-            'is_new' => (bool) $isNew,
-            'posted_at' => optional($postedAt)->toISOString() ?? null,
-            'closed_at' => optional($closedAt)->toISOString() ?? null,  // NEW
-            'description' => (string) $job->description,
-            'overview' => $this->generateOverviewFromDescription($job->description),
-            'requirements' => $this->generateRequirementsFromDescription($job->description),
-            'responsibilities' => $this->generateResponsibilitiesFromDescription($job->description),
-            'benefits' => $benefs,
-            'application_link' => $company['website'] ?: null,
-            'has_applied' => (bool) $app,                         // NEW
-            'is_saved' => (bool) $saved,                          // NEW
-            
-        ];
-
-        return response()->json($response);
     }
+
+
 
     private static function humanizeJobType(?string $jobType): string
     {
