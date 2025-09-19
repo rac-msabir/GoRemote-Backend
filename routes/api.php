@@ -41,3 +41,5 @@ Route::get('/companies/{company}/reviews', [\App\Http\Controllers\CompanyControl
 Route::get('/companies/{company}/salaries', [\App\Http\Controllers\CompanyController::class, 'salaries']);
 
 
+//HomeCOntroller
+Route::get('/get/categories', [\App\Http\Controllers\HomeController::class, 'getCategories']);
