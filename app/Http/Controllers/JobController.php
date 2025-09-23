@@ -28,6 +28,7 @@ class JobController extends Controller
                     'jobs.*',
                     'employers.company_name as company_name',
                     'employers.website as employer_website',
+                    'employers.image as company_logo',
                     'categories.name as category_name',
                 ])
                 ->leftJoin('employers', 'employers.id', '=', 'jobs.employer_id')
@@ -305,6 +306,7 @@ class JobController extends Controller
                         ? 'Remote'
                         : (trim(implode(', ', array_filter([$row->city, $row->state_province, $row->country_code]))) ?: $row->country_code),
                     'website'  => $row->employer_website,
+                    'company_logo'  => $row->company_logo,
                 ];
 
                 $app   = $appByJob->get($row->id);
@@ -334,32 +336,24 @@ class JobController extends Controller
                 ];
             })->all();
 
-            $response = [
-                'status_code'   => 200,
-                'error'         => false,
-                'errorMessage'  => null,
-                'data'          => [
-                    'jobs'       => $data,
-                    'benefits'   => $benefitsList,
-                    'categories' => $categories,
-                    'employers'  => $employersList,
-                    'pagination' => [
-                        'current_page' => $paginator->currentPage(),
-                        'total_pages'  => $paginator->lastPage(),
-                        'total_jobs'   => $paginator->total(),
-                    ],
+            $responseData = [
+                'jobs'       => $data,
+                'benefits'   => $benefitsList,
+                'categories' => $categories,
+                'employers'  => $employersList,
+                'pagination' => [
+                    'current_page' => $paginator->currentPage(),
+                    'total_pages'  => $paginator->lastPage(),
+                    'total_jobs'   => $paginator->total(),
                 ],
             ];
 
-            return response()->json($response, 200);
+            // This will wrap it into the global structure automatically
+            return response()->api($responseData);
 
         } catch (\Throwable $e) {
-            return response()->json([
-                'status_code'   => 500,
-                'error'         => true,
-                'errorMessage'  => $e->getMessage(),
-                'data'          => null,
-            ], 500);
+            
+            return response()->api(null, true, $e->getMessage(), 500);
         }
     }
 
@@ -374,12 +368,7 @@ class JobController extends Controller
 
             if (!$job) {
                 // Job not found → return null in data
-                return response()->json([
-                    'status_code' => 200,
-                    'error' => true,
-                    'errorMessage' => null,
-                    'data' => null,
-                ], 200);
+                return response()->api(null, true, null, 200);
             }
 
             // Company details
@@ -469,28 +458,19 @@ class JobController extends Controller
             $categories = DB::table('categories')->pluck('name')->all();
             $employersList = DB::table('employers')->pluck('company_name')->all();
 
-            $response = [
-                'status_code' => 200,
-                'error' => false,
-                'errorMessage' => null,
-                'data' => [
-                    'jobs' => $data,
-                    'benefits' => $benefitsList,
-                    'categories' => $categories,
-                    'employers' => $employersList,
-                    'pagination' => null, // single job
-                ],
+             $responseData = [
+                'jobs' => $data,
+                'benefits' => $benefitsList,
+                'categories' => $categories,
+                'employers' => $employersList,
+                'pagination' => null,
             ];
 
-            return response()->json($response, 200);
+            return response()->api($responseData);
 
         } catch (\Throwable $e) {
-            return response()->json([
-                'status_code' => 500,
-                'error' => true,
-                'errorMessage' => $e->getMessage(),
-                'data' => null,
-            ], 500);
+
+             return response()->api(null, true, $e->getMessage(), 500);
         }
     }
 

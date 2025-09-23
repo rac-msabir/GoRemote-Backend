@@ -23,25 +23,20 @@ class SavedJobController extends Controller
                 $job->id => ['created_at' => now()]
             ]);
 
-            return response()->json([
-                'status_code'  => 200,
-                'error'        => false,
-                'errorMessage' => null,
-                'data'         => [
-                    'message' => 'Job saved successfully',
-                    'saved'   => true,
-                    'job_id'  => $job->id,
-                ],
-            ], 200);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status_code'  => 500,
-                'error'        => true,
-                'errorMessage' => $e->getMessage(),
-                'data'         => null,
-            ], 500);
+            $data = [
+                'message' => 'Job saved successfully',
+                'saved'   => true,
+                'job_id'  => $job->id,
+            ];
+
+            return response()->api($data); // ✅ success response
+
+        } catch (\Throwable $e) {
+            
+            return response()->api(null, true, $e->getMessage(), 500); // ✅ error response
         }
     }
+
 
     public function destroy(Request $request, Job $job)
     {
@@ -50,25 +45,18 @@ class SavedJobController extends Controller
 
             $seeker->savedJobs()->detach($job->id);
 
-            return response()->json([
-                'status_code'  => 200,
-                'error'        => false,
-                'errorMessage' => null,
-                'data'         => [
-                    'message' => 'Job unsaved successfully',
-                    'saved'   => false,
-                    'job_id'  => $job->id,
-                ],
-            ], 200);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status_code'  => 500,
-                'error'        => true,
-                'errorMessage' => $e->getMessage(),
-                'data'         => null,
-            ], 500);
+            $data = [
+                'message' => 'Job unsaved successfully',
+                'saved'   => false,
+                'job_id'  => $job->id,
+            ];
+
+            return response()->api($data); // ✅ success response
+        } catch (\Throwable $e) {
+            return response()->api(null, true, $e->getMessage(), 500); // ✅ error response
         }
     }
+
 
 }
 

@@ -7,7 +7,7 @@ use DB;
 
 class HomeController extends Controller
 {
-    public function getCategories(Request $request)
+   public function getCategories(Request $request)
     {
         try {
             $categories = DB::table('categories')
@@ -16,30 +16,18 @@ class HomeController extends Controller
                 ->get();
 
             if ($categories->isEmpty()) {
-                return response()->json([
-                    'status_code'  => 200,
-                    'error'        => true,
-                    'errorMessage' => 'No categories found.',
-                    'data'         => null,
-                ], 200);
+                return response()->api(null, true, 'No categories found.', 200);
             }
 
-            return response()->json([
-                'status_code'  => 200,
-                'error'        => false,
-                'errorMessage' => null,
-                'data'         => [
-                    'categories' => $categories,
-                ],
-            ], 200);
+            $data = [
+                'categories' => $categories,
+            ];
+
+            return response()->api($data); // ✅ success response
 
         } catch (\Throwable $e) {
-            return response()->json([
-                'status_code'  => 500,
-                'error'        => true,
-                'errorMessage' => $e->getMessage(),
-                'data'         => null,
-            ], 500);
+            return response()->api(null, true, $e->getMessage(), 500); // ✅ error response
         }
     }
+
 }

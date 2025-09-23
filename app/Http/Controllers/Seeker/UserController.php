@@ -10,7 +10,7 @@ use App\Models\SeekerDesiredTitle;
 
 class UserController extends Controller
 {
-   public function findSeeker(Request $request)
+    public function findSeeker(Request $request)
     {
         try {
             $seekers = User::with([
@@ -23,12 +23,7 @@ class UserController extends Controller
             ->paginate(10);
 
             if ($seekers->isEmpty()) {
-                return response()->json([
-                    'status_code' => 200,
-                    'error' => true,
-                    'errorMessage' => 'No seekers found',
-                    'data' => null,
-                ]);
+                return response()->api(null, true, 'No seekers found', 200);
             }
 
             // Transform seekers for frontend
@@ -38,43 +33,35 @@ class UserController extends Controller
                     'name' => $user->name ?? null,
                     'email' => $user->email ?? null,
                     'profile' => [
-                        'phone' => $user->profile->phone ?? null,
-                        'city' => $user->profile->city ?? null,
+                        'phone'   => $user->profile->phone ?? null,
+                        'city'    => $user->profile->city ?? null,
                         'country' => $user->profile->country ?? null,
-                        'dob' => $user->profile->dob ?? null,
-                        'gender' => $user->profile->gender ?? null,
+                        'dob'     => $user->profile->dob ?? null,
+                        'gender'  => $user->profile->gender ?? null,
                     ],
                     'desired_titles' => $user->jobSeeker->desiredTitles->map(function ($title) {
                         return [
-                            'id' => $title->id,
-                            'title' => $title->title ?? null,
+                            'id'       => $title->id,
+                            'title'    => $title->title ?? null,
                             'priority' => $title->priority ?? null,
                         ];
                     }),
                 ];
             });
 
-            return response()->json([
-                'status_code' => 200,
-                'error' => false,
-                'errorMessage' => null,
-                'data' => [
-                    'seekers' => $seekersTransformed,
-                    'pagination' => [
-                        'current_page' => $seekers->currentPage(),
-                        'last_page' => $seekers->lastPage(),
-                        'per_page' => $seekers->perPage(),
-                        'total' => $seekers->total(),
-                    ],
+            $data = [
+                'seekers' => $seekersTransformed,
+                'pagination' => [
+                    'current_page' => $seekers->currentPage(),
+                    'last_page'    => $seekers->lastPage(),
+                    'per_page'     => $seekers->perPage(),
+                    'total'        => $seekers->total(),
                 ],
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status_code' => 500,
-                'error' => true,
-                'errorMessage' => $e->getMessage(),
-                'data' => null,
-            ]);
+            ];
+
+            return response()->api($data); // ✅ success response
+        } catch (\Throwable $e) {
+            return response()->api(null, true, $e->getMessage(), 500); // ✅ error response
         }
     }
 
