@@ -23,6 +23,7 @@ Route::get('/jobs', [\App\Http\Controllers\JobController::class, 'index']);
 Route::get('/jobs/filter', [\App\Http\Controllers\JobController::class, 'index']);
 Route::get('/jobs/{job}', [\App\Http\Controllers\JobController::class, 'show']);
 Route::get('/stats/hero', [\App\Http\Controllers\JobController::class, 'statsHero']);
+Route::get('/get/job-name', [\App\Http\Controllers\JobController::class, 'getJobNames']);
 Route::get('/get-saved-jobs', [\App\Http\Controllers\JobController::class, 'getSavedJobs'])->middleware('auth:sanctum');
 
 

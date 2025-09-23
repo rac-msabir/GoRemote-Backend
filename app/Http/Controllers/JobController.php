@@ -712,6 +712,35 @@ class JobController extends Controller
         ]);
     }
 
+    public function getJobNames()
+    {
+        try {
+            $jobs = Job::query()
+                ->select([
+                    'jobs.title',
+                    'jobs.uuid',
+                    'employers.company_name',
+                ])
+                ->leftJoin('employers', 'employers.id', '=', 'jobs.employer_id')
+                ->where('jobs.status', 'published')
+                ->get();
+
+            if ($jobs->isEmpty()) {
+                return response()->api(null, true, 'No jobs found', 200);
+            }
+
+            $data = [
+                'jobs' => $jobs,
+            ];
+
+            return response()->api($data); // ✅ success response
+        } catch (\Throwable $e) {
+            return response()->api(null, true, $e->getMessage(), 500); // ✅ error response
+        }
+    }
+
+
+
 }
 
 
