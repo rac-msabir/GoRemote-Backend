@@ -36,7 +36,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('employer_id')->constrained('employers')->cascadeOnDelete();
             $table->string('title', 191)->index();
-            $table->longText('description');
+            $table->longText('description')->nullable();
             $table->enum('location_type', ['on_site','hybrid','remote'])->default('on_site')->index();
             $table->string('city', 120)->nullable();
             $table->string('state_province', 120)->nullable();

@@ -82,4 +82,9 @@ class Job extends Model
     {
         return $this->hasMany(JobApplication::class);
     }
+    
+    public function descriptions()
+    {
+        return $this->hasMany(JobDescription::class);
+    }
 }
