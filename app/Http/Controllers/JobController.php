@@ -24,7 +24,7 @@ class JobController extends Controller
         $employersList = DB::table('employers')->select('id', 'company_name')->orderBy('company_name')->get();
 
         $query = Job::query()
-            ->with(['descriptions']) // 👈 eager-load descriptions
+            ->with(['descriptions']) // eager-load descriptions
             ->select([
                 'jobs.*',
                 'employers.company_name as company_name',
@@ -36,9 +36,9 @@ class JobController extends Controller
             ->leftJoin('categories', 'categories.id', '=', 'jobs.category_id')
             ->where('jobs.status', 'published');
 
-        /** ----------------- Filters (kept from your first version) ----------------- */
+        /** ----------------- Filters ----------------- */
 
-        // EXP level via REGEXP (run only if provided)
+        // EXPERIENCE (only if provided)
         if ($expRaw = $request->input('experiencelevel')) {
             $label   = Str::lower(trim($expRaw));
             $pattern = null;
@@ -80,12 +80,32 @@ class JobController extends Controller
             }
         }
 
-        // search
-        if ($search = $request->string('search')->toString()) {
-            $like = '%' . $search . '%';
-            $query->where(function ($q) use ($like) {
-                $q->where('jobs.title', 'like', $like)
-                  ->orWhere('jobs.description', 'like', $like);
+        // SEARCH (simple & fast; searches across main fields)
+        if (($search = trim((string) $request->query('search'))) !== '') {
+            $terms = preg_split('/\s+/', $search, -1, PREG_SPLIT_NO_EMPTY);
+            $cols = [
+                'jobs.title',
+                'jobs.description',
+                'jobs.job_type',
+                'jobs.city',
+                'jobs.state_province',
+                'jobs.country_name',
+                'jobs.country_code',
+                'employers.company_name',
+                'categories.name',
+            ];
+
+            $query->where(function ($q) use ($terms, $cols) {
+                // AND over terms
+                foreach ($terms as $term) {
+                    $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $term) . '%';
+                    // OR over columns for each term
+                    $q->where(function ($qq) use ($cols, $like) {
+                        foreach ($cols as $col) {
+                            $qq->orWhere($col, 'like', $like);
+                        }
+                    });
+                }
             });
         }
 
@@ -106,7 +126,7 @@ class JobController extends Controller
             $query->where('jobs.category_id', $categoryId);
         }
 
-        // countries
+        // COUNTRIES
         $countries = [];
         if ($c = $request->string('country')->toString()) { $countries[] = $c; }
         $countriesInput = $request->input('countries', []);
@@ -122,17 +142,16 @@ class JobController extends Controller
             });
         }
 
-        // Salary filtering (columns are DECIMAL dollars, not "k")
+        // SALARY (pay_min / pay_max are dollars)
         if (($salary = $request->query('salary')) && is_string($salary)) {
             $query->where(function ($q) use ($salary) {
-                $parsed = $this->parseSalaryRange($salary); // ['min' => ?int, 'max' => ?int] (dollars)
+                $parsed = $this->parseSalaryRange($salary); // ['min'=>?int,'max'=>?int]
                 if (!$parsed) return;
 
-                $min = $parsed['min']; // dollars
-                $max = $parsed['max']; // dollars
+                $min = $parsed['min'];
+                $max = $parsed['max'];
 
                 if ($min !== null && $max !== null) {
-                    // overlap with [min, max]
                     $q->where(function ($qq) use ($min, $max) {
                         $qq
                         ->where(function ($c) use ($min, $max) {
@@ -153,7 +172,6 @@ class JobController extends Controller
                         });
                     });
                 } elseif ($min !== null) {
-                    // "180k+" → any job whose range reaches or exceeds min
                     $q->where(function ($qq) use ($min) {
                         $qq->where(function ($c) use ($min) {
                                 $c->whereNotNull('jobs.pay_min')->where('jobs.pay_min', '>=', $min);
@@ -163,7 +181,6 @@ class JobController extends Controller
                             });
                     });
                 } elseif ($max !== null) {
-                    // "up to X" → any job whose range is at/below max
                     $q->where(function ($qq) use ($max) {
                         $qq->where(function ($c) use ($max) {
                                 $c->whereNotNull('jobs.pay_min')->where('jobs.pay_min', '<=', $max);
@@ -174,10 +191,9 @@ class JobController extends Controller
                     });
                 }
             });
-            // If USD-only searches: $query->where('jobs.currency', 'USD');
         }
 
-        // skills by slug
+        // SKILLS
         $skillSlugs = $request->input('skills', []);
         if (is_string($skillSlugs)) {
             $skillSlugs = array_filter(array_map('trim', explode(',', $skillSlugs)));
@@ -196,7 +212,7 @@ class JobController extends Controller
             });
         }
 
-        // date posted
+        // DATE POSTED
         if (($datePostedRaw = $request->input('dateposted')) !== null
             && $datePostedRaw !== '' && Str::lower($datePostedRaw) !== 'any') {
             $label = Str::of($datePostedRaw)->lower()->trim();
@@ -226,14 +242,14 @@ class JobController extends Controller
             $query->where('jobs.employer_id', $employerId);
         }
 
-        // Sorting
+        // SORT
         $sort = $request->string('sort')->toString();
         $query->orderBy('jobs.posted_at', $sort === 'oldest' ? 'asc' : 'desc');
 
-        /** --------------- Execute main query --------------- */
+        /** --------------- Execute --------------- */
         $paginator = $query->paginate($perPage);
 
-        // User context (batch)
+        // USER CONTEXT (batch)
         $userId = Auth::guard('sanctum')->id();
         $jobIds = collect($paginator->items())->pluck('id')->all();
 
@@ -262,7 +278,7 @@ class JobController extends Controller
             }
         }
 
-        // Benefits for all jobs in ONE query (no per-row round trips)
+        // BENEFITS (single round trip)
         $benefitsByJob = collect();
         if ($jobIds) {
             $benefitsByJob = DB::table('job_benefit_job as jb')
@@ -307,7 +323,7 @@ class JobController extends Controller
             $saved = $savedByJob->get($row->id);
             $benef = $benefitsByJob->get($row->id, []);
 
-            // 🔹 Dynamic descriptions grouped by 'type' from relation
+            // Dynamic descriptions grouped by 'type'
             $descriptions = collect($row->descriptions)->groupBy('type')->map(
                 fn($items) => $items->pluck('content')->values()->all()
             );
@@ -324,7 +340,7 @@ class JobController extends Controller
                 'is_new'           => (bool) $isNew,
                 'posted_at'        => optional($postedAt)?->toISOString() ?? null,
                 'closed_at'        => optional($closedAt)?->toISOString() ?? null,
-                'descriptions'     => $descriptions,           // 👈 new dynamic block
+                'descriptions'     => $descriptions,
                 'benefits'         => $benef,
                 'application_link' => $company['website'] ?: null,
                 'has_applied'      => (bool) $app,
