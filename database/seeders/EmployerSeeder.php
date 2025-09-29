@@ -44,7 +44,7 @@ class EmployerSeeder extends Seeder
         // ------------------------------
         // Create Employers + Users + Jobs
         // ------------------------------
-        for ($i = 0; $i < 5; $i++) {
+        for ($i = 0; $i < 200; $i++) {
             $employer = Employer::create([
                 'company_name' => fake()->company(),
                 'website' => fake()->optional()->url(),

@@ -23,6 +23,9 @@ class JobController extends Controller
         $categories    = DB::table('categories')->select('id', 'name')->orderBy('name')->get();
         $employersList = DB::table('employers')->select('id', 'company_name')->orderBy('company_name')->get();
 
+        // Compute "featured" cut-off once
+        $featuredCutoff = now()->subDays(7)->toDateTimeString();
+
         $query = Job::query()
             ->with(['descriptions']) // eager-load descriptions
             ->select([
@@ -32,6 +35,14 @@ class JobController extends Controller
                 'employers.image as company_logo',
                 'categories.name as category_name',
             ])
+            // lightweight computed flag used only for sorting (and we’ll reuse in payload)
+            ->addSelect(DB::raw("
+                CASE
+                    WHEN (jobs.pay_max IS NOT NULL AND jobs.pay_max >= 150000)
+                         OR (jobs.posted_at >= '{$featuredCutoff}' AND jobs.job_type = 'full_time')
+                    THEN 1 ELSE 0
+                END as __is_featured
+            "))
             ->leftJoin('employers', 'employers.id', '=', 'jobs.employer_id')
             ->leftJoin('categories', 'categories.id', '=', 'jobs.category_id')
             ->where('jobs.status', 'published');
@@ -80,7 +91,7 @@ class JobController extends Controller
             }
         }
 
-        // SEARCH (simple & fast; searches across main fields)
+        // SEARCH (simple & fast; across key fields)
         if (($search = trim((string) $request->query('search'))) !== '') {
             $terms = preg_split('/\s+/', $search, -1, PREG_SPLIT_NO_EMPTY);
             $cols = [
@@ -94,12 +105,9 @@ class JobController extends Controller
                 'employers.company_name',
                 'categories.name',
             ];
-
             $query->where(function ($q) use ($terms, $cols) {
-                // AND over terms
                 foreach ($terms as $term) {
                     $like = '%' . str_replace(['%', '_'], ['\\%', '\\_'], $term) . '%';
-                    // OR over columns for each term
                     $q->where(function ($qq) use ($cols, $like) {
                         foreach ($cols as $col) {
                             $qq->orWhere($col, 'like', $like);
@@ -142,7 +150,7 @@ class JobController extends Controller
             });
         }
 
-        // SALARY (pay_min / pay_max are dollars)
+        // SALARY
         if (($salary = $request->query('salary')) && is_string($salary)) {
             $query->where(function ($q) use ($salary) {
                 $parsed = $this->parseSalaryRange($salary); // ['min'=>?int,'max'=>?int]
@@ -242,9 +250,10 @@ class JobController extends Controller
             $query->where('jobs.employer_id', $employerId);
         }
 
-        // SORT
+        // SORT: Featured first, then by posted_at
         $sort = $request->string('sort')->toString();
-        $query->orderBy('jobs.posted_at', $sort === 'oldest' ? 'asc' : 'desc');
+        $query->orderByDesc('__is_featured')
+              ->orderBy('jobs.posted_at', $sort === 'oldest' ? 'asc' : 'desc');
 
         /** --------------- Execute --------------- */
         $paginator = $query->paginate($perPage);
@@ -295,7 +304,11 @@ class JobController extends Controller
             $postedAt = $row->posted_at ?: $row->created_at;
             $closedAt = $row->closed_at;
             $isNew    = $postedAt ? Carbon::parse($postedAt)->greaterThanOrEqualTo(now()->subDays(7)) : false;
-            $isFeat   = ($row->pay_max && $row->pay_max >= 150000) || ($isNew && $row->job_type === 'full_time');
+
+            // Prefer SQL-computed flag if present
+            $isFeat = isset($row->__is_featured)
+                ? (bool) $row->__is_featured
+                : (($row->pay_max && $row->pay_max >= 150000) || ($isNew && $row->job_type === 'full_time'));
 
             $tags = [];
             if ($isFeat) $tags[] = 'Featured';
@@ -366,6 +379,7 @@ class JobController extends Controller
         return response()->api(null, true, $e->getMessage(), 500);
     }
 }
+
 
 
 
