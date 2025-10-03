@@ -30,4 +30,27 @@ class HomeController extends Controller
         }
     }
 
+    public function getSkills(Request $request)
+    {
+        try {
+            $categories = DB::table('skills')
+                ->select('id', 'name')
+                ->orderBy('name')
+                ->get();
+
+            if ($categories->isEmpty()) {
+                return response()->api(null, true, 'No categories found.', 200);
+            }
+
+            $data = [
+                'skills' => $categories,
+            ];
+
+            return response()->api($data); // ✅ success response
+
+        } catch (\Throwable $e) {
+            return response()->api(null, true, $e->getMessage(), 500); // ✅ error response
+        }
+    }
+
 }

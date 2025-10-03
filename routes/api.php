@@ -29,9 +29,10 @@ Route::get('/get-saved-jobs', [\App\Http\Controllers\JobController::class, 'getS
 
 Route::post('/jobs/{job}/save', [\App\Http\Controllers\Seeker\SavedJobController::class, 'store'])->middleware('auth:sanctum');
 Route::delete('/jobs/{job}/save', [\App\Http\Controllers\Seeker\SavedJobController::class, 'destroy'])->middleware('auth:sanctum');
-
+Route::post('/post-job', [\App\Http\Controllers\Seeker\SavedJobController::class, 'postJobs']);
 
 Route::post('/jobs/{job}/apply', [\App\Http\Controllers\JobApplicationController::class, 'apply'])->middleware('auth:sanctum');
+
 
 
 
@@ -44,3 +45,4 @@ Route::get('/companies/{company}/salaries', [\App\Http\Controllers\CompanyContro
 
 //HomeCOntroller
 Route::get('/get/categories', [\App\Http\Controllers\HomeController::class, 'getCategories']);
+Route::get('/get/skills', [\App\Http\Controllers\HomeController::class, 'getSkills']);
