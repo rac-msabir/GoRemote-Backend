@@ -591,6 +591,7 @@ class JobController extends Controller
                 'company' => $company,
                 'vacancies' => $job->vacancies,
                 'job_type' => self::humanizeJobType($job->job_type),
+                'location_type' => $job->location_type,
                 'salary_range' => $salaryRange,
                 'tags' => $tags,
                 'is_featured' => (bool) $isFeatured,
