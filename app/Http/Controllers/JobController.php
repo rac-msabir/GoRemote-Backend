@@ -346,6 +346,7 @@ class JobController extends Controller
                 'title'            => $row->title,
                 'company'          => $company,
                 'vacancies'        => $row->vacancies,
+                'location_type'    => $row->location_type,
                 'job_type'         => self::humanizeJobType($row->job_type),
                 'salary_range'     => $salaryRange,
                 'tags'             => $tags,

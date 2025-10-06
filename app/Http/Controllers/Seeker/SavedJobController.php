@@ -185,16 +185,16 @@ class SavedJobController extends Controller
 
                     'vacancies'      => $validated['vacancies'],
 
-                    // Salary fields if you plan to split later:
-                    // 'pay_min'      => $request->input('pay_min'),
-                    // 'pay_max'      => $request->input('pay_max'),
-                    // 'currency'     => $request->input('currency'),
-                    // 'pay_period'   => $request->input('pay_period'),   // hour/day/week/month/year
-                    // 'pay_visibility'=> $request->input('pay_visibility'), // range/exact/starting_at
+                   // Salary fields if you plan to split later:
+                    'pay_min'      => $request->input('pay_min'),
+                    'pay_max'      => $request->input('pay_max'),
+                    'currency'     => $request->input('currency'),
+                    'pay_period'   => $request->input('pay_period'),   // hour/day/week/month/year
+                    'pay_visibility'=> $request->input('pay_visibility'), // range/exact/starting_at
 
-                    // Status fields
-                    // 'status'       => 'draft', // default from schema
-                    // 'posted_at'    => now(),
+                    //Status fields
+                    'status'       => 'published', // default from schema
+                    'posted_at'    => now(),
                 ]);
 
                 // Pivot: skills
