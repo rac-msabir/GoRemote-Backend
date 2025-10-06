@@ -7,6 +7,7 @@ use Auth;
 use DB;
 use Carbon\Carbon;
 use App\Models\Job;
+use Illuminate\Support\Str;
 use App\Models\JobBenefit;
 use App\Models\SavedJob;
 use App\Models\JobSeeker;
@@ -61,15 +62,16 @@ class SavedJobController extends Controller
     public function postJobs(Request $request)
     {
         try {
+            // --- Optional auth/role gate ---
             // $user = $request->user();
             // if (!$user || $user->role !== 'employer') {
             //     return response()->api(null, true, 'Only employers can post jobs.', 403);
             // }
-            $employerId = auth()->id() ?? 1; // replace with $user->id if you enable the auth check
+            $employerId = auth()->id() ?? 1; // replace with $user->id when you enable the gate
 
-            // ---------------------------
-            // Normalize arrays (skills, benefits) and enums (job_type, location_type)
-            // ---------------------------
+            // ---------------------------------------------------
+            // Helpers
+            // ---------------------------------------------------
             $normalizeIdArray = function ($input) {
                 if (is_array($input)) {
                     $arr = $input;
@@ -79,122 +81,195 @@ class SavedJobController extends Controller
                     if (json_last_error() === JSON_ERROR_NONE && is_array($json)) {
                         $arr = $json;
                     } else {
-                        $arr = strpos($trimmed, ',') !== false ? explode(',', $trimmed) : ($trimmed !== '' ? [$trimmed] : []);
+                        $arr = strpos($trimmed, ',') !== false
+                            ? explode(',', $trimmed)
+                            : ($trimmed !== '' ? [$trimmed] : []);
                     }
                 } elseif (is_numeric($input)) {
                     $arr = [$input];
                 } else {
                     $arr = [];
                 }
+
                 // cast to ints, dedupe, drop empties/non-numerics
                 return array_values(array_unique(array_filter(array_map(function ($v) {
                     return is_numeric($v) ? (int) $v : null;
                 }, (array) $arr))));
             };
 
-            // Normalize skills & benefits to array<int>
-            $skills   = $normalizeIdArray($request->input('skills'));
-            $benefits = $normalizeIdArray($request->input('benefits'));
-
-            // Normalize enums: front-end uses hyphens; DB uses underscores
             $normalizeEnum = function (?string $v) {
                 if ($v === null) return null;
                 return str_replace('-', '_', strtolower($v));
             };
-            $jobTypeInput      = $normalizeEnum($request->input('job_type'));
-            $locationTypeInput = $normalizeEnum($request->input('location_type'));
 
-            // Merge normalized values back into request before validation
+            // ---------------------------------------------------
+            // Normalize incoming arrays/enums BEFORE validating
+            // ---------------------------------------------------
+            $skills        = $normalizeIdArray($request->input('skills'));
+            $benefits      = $normalizeIdArray($request->input('benefits'));
+            $jobTypeInput  = $normalizeEnum($request->input('job_type'));
+            $locTypeInput  = $normalizeEnum($request->input('location_type'));
+
             $request->merge([
                 'skills'        => $skills,
                 'benefits'      => $benefits,
                 'job_type'      => $jobTypeInput,
-                'location_type' => $locationTypeInput,
+                'location_type' => $locTypeInput,
             ]);
 
-            // ---------------------------
-            // Validate
-            // ---------------------------
+            // ---------------------------------------------------
+            // Validate base fields (description validated loosely here)
+            // ---------------------------------------------------
             $validated = $request->validate([
-                'title'           => 'required|string|max:191',
-                'category_id'     => 'required|integer|exists:categories,id',
-                'description'     => 'required|string',
-                'job_type'        => 'required|in:full_time,part_time,temporary,contract,internship,fresher',
-                'location_type'   => 'required|in:on_site,hybrid,remote',
-                'city'            => 'nullable|string|max:120',
-                'state_province'  => 'nullable|string|max:120', // you can also accept "state" and map below
-                'vacancies'       => 'nullable|integer|min:1',
-                'country_name'    => 'nullable|string|max:120',
-                'country_code'    => 'nullable|string|size:2',
+                'title'             => 'required|string|max:191',
+                'category_id'       => 'required|integer|exists:categories,id',
 
-                'apply_url'       => 'nullable|url',
-                'apply_email'     => 'nullable|email',
+                // description arrives as array of section-objects; allow array|json
+                'description'       => 'required',
 
-                'skills'          => 'nullable|array',
-                'skills.*'        => 'integer|exists:skills,id',
+                'job_type'          => 'required|in:full_time,part_time,temporary,contract,internship,fresher',
+                'location_type'     => 'required|in:on_site,hybrid,remote',
 
-                'benefits'        => 'nullable|array',
-                'benefits.*'      => 'integer|exists:job_benefits,id', // change table if yours is different
+                'city'              => 'nullable|string|max:120',
+                'state_province'    => 'nullable|string|max:120',
+                'vacancies'         => 'nullable|integer|min:1',
+                'country_name'      => 'nullable|string|max:120',
+                'country_code'      => 'nullable|string|size:2',
 
-                // Optional arrays of strings that go to job_descriptions
-                'responsibilities'=> 'nullable|array',
-                'responsibilities.*' => 'nullable|string',
-                'requirements'    => 'nullable|array',
-                'requirements.*'  => 'nullable|string',
+                'apply_url'         => 'nullable|url',
+                'apply_email'       => 'nullable|email',
+
+                'skills'            => 'nullable|array',
+                'skills.*'          => 'integer|exists:skills,id',
+
+                'benefits'          => 'nullable|array',
+                'benefits.*'        => 'integer|exists:job_benefits,id', // adjust table if different
+
+                // Optional compensation fields if provided
+                'pay_min'           => 'nullable|numeric',
+                'pay_max'           => 'nullable|numeric|gte:pay_min',
+                'currency'          => 'nullable|string|size:3',
+                'pay_period'        => 'nullable|in:hour,day,week,month,year',
+                'pay_visibility'    => 'nullable|in:range,exact,starting_at',
+
+                // Optional extras
+                'location'          => 'nullable|string|max:191',
+                'company_id'        => 'nullable|integer|exists:companies,id',
             ]);
 
-            // Accept "state" alias from FE and map into state_province if provided
-            $stateFromAlias = $request->input('state');
-            if (!empty($stateFromAlias) && empty($validated['state_province'])) {
-                $validated['state_province'] = $stateFromAlias;
+            // Accept alias "state" from FE if provided
+            if ($request->filled('state') && empty($validated['state_province'])) {
+                $validated['state_province'] = $request->string('state')->toString();
             }
 
-            // Accept "countries" (old field) as country_name if you don’t have separate code/name
-            $countriesLegacy = $request->input('countries');
-            if (!empty($countriesLegacy) && empty($validated['country_name'])) {
-                $validated['country_name'] = $countriesLegacy;
+            // Backward compat: "countries" -> country_name
+            if ($request->filled('countries') && empty($validated['country_name'])) {
+                $validated['country_name'] = $request->string('countries')->toString();
             }
 
-            // Vacancies default (table default = 1)
+            // Default vacancies to 1 if missing
             if (!isset($validated['vacancies']) || $validated['vacancies'] === null) {
                 $validated['vacancies'] = 1;
             }
 
-            // ---------------------------
-            // Create records in a transaction
-            // ---------------------------
-            return DB::transaction(function () use ($validated, $employerId, $skills, $benefits, $request) {
+            // ---------------------------------------------------
+            // Parse description sections array
+            // - Expected: array of objects, each with one key:
+            //   [{ "overview": [..] }, { "responsibilities": [..] }, { "requirements": [..] }]
+            // - Also tolerate a single object form.
+            // ---------------------------------------------------
+            $descPayload = $request->input('description');
+
+            // If JSON string, decode
+            if (is_string($descPayload)) {
+                $decoded = json_decode($descPayload, true);
+                if (json_last_error() === JSON_ERROR_NONE) {
+                    $descPayload = $decoded;
+                }
+            }
+
+            // Normalize to an array of section objects
+            if (is_array($descPayload) && self::isAssoc($descPayload)) {
+                // Single object form => wrap
+                $descPayload = [$descPayload];
+            } elseif (!is_array($descPayload)) {
+                // Invalid shape -> normalize to empty to avoid errors downstream
+                $descPayload = [];
+            }
+
+            // Map section keys to DB `type` values
+            $sectionKeyToType = function (string $key): ?string {
+                $k = strtolower(str_replace('-', '_', $key));
+                return match ($k) {
+                    'overview'         => 'overview',
+                    'responsibilities' => 'responsibility',
+                    'requirements'     => 'requirement',
+                    default            => null, // ignore unknown keys
+                };
+            };
+
+            // Build a flat list of [type => string item] for insert
+            $descRows = [];
+            foreach ($descPayload as $sectionObj) {
+                if (!is_array($sectionObj)) continue;
+
+                foreach ($sectionObj as $key => $items) {
+                    $type = $sectionKeyToType($key);
+                    if (!$type) continue;
+
+                    // items can be array or string; normalize to array of strings
+                    if (is_string($items)) {
+                        $items = [$items];
+                    }
+                    if (!is_array($items)) continue;
+
+                    foreach ($items as $content) {
+                        $content = trim((string) $content);
+                        if ($content === '') continue;
+                        $descRows[] = ['type' => $type, 'content' => $content];
+                    }
+                }
+            }
+
+            // ---------------------------------------------------
+            // Persist everything in a transaction
+            // ---------------------------------------------------
+            return DB::transaction(function () use ($validated, $employerId, $skills, $benefits, $request, $descRows) {
                 $job = Job::create([
-                    'uuid'           => (string) \Str::uuid(),
-                    'employer_id'    => $employerId,
-                    'company_id'     => $request->input('company_id'), // optional if you track companies
-                    'title'          => $validated['title'],
-                    'slug'           => \Str::slug($validated['title']) . '-' . substr((string) \Str::uuid(), 0, 8),
+                    'uuid'            => (string) Str::uuid(),
+                    'employer_id'     => $employerId,
+                    'company_id'      => $request->input('company_id'),
 
-                    'category_id'    => $validated['category_id'],
-                    'description'    => $validated['description'],
+                    'title'           => $validated['title'],
+                    'slug'            => Str::slug($validated['title']) . '-' . substr((string) Str::uuid(), 0, 8),
 
-                    'job_type'       => $validated['job_type'],        // DB enum underscores
-                    'location_type'  => $validated['location_type'],   // DB enum underscores
-                    'location'       => $request->input('location'),   // optional free-text location, if you use it
+                    'category_id'     => $validated['category_id'],
 
-                    'city'           => $validated['city'] ?? null,
-                    'state_province' => $validated['state_province'] ?? null,
-                    'country_name'   => $validated['country_name'] ?? null,
-                    'country_code'   => $validated['country_code'] ?? null,
+                    // NOTE: main HTML/body can also be stored; if you want to keep a raw HTML section,
+                    // you can either add a column or keep using descriptions[] with 'overview'.
+                    // Here we do NOT store a standalone longtext "description" since your payload moved to structured sections.
+                    // If your jobs table still has `description` column and you want to keep an HTML summary, uncomment below:
+                    // 'description'    => is_string($request->input('description_html')) ? $request->input('description_html') : null,
 
-                    'vacancies'      => $validated['vacancies'],
+                    'job_type'        => $validated['job_type'],
+                    'location_type'   => $validated['location_type'],
+                    'location'        => $request->input('location'),
 
-                   // Salary fields if you plan to split later:
-                    'pay_min'      => $request->input('pay_min'),
-                    'pay_max'      => $request->input('pay_max'),
-                    'currency'     => $request->input('currency'),
-                    'pay_period'   => $request->input('pay_period'),   // hour/day/week/month/year
-                    'pay_visibility'=> $request->input('pay_visibility'), // range/exact/starting_at
+                    'city'            => $validated['city'] ?? null,
+                    'state_province'  => $validated['state_province'] ?? null,
+                    'country_name'    => $validated['country_name'] ?? null,
+                    'country_code'    => $validated['country_code'] ?? null,
 
-                    //Status fields
-                    'status'       => 'published', // default from schema
-                    'posted_at'    => now(),
+                    'vacancies'       => $validated['vacancies'],
+
+                    'pay_min'         => $request->input('pay_min'),
+                    'pay_max'         => $request->input('pay_max'),
+                    'currency'        => $request->input('currency'),
+                    'pay_period'      => $request->input('pay_period'),
+                    'pay_visibility'  => $request->input('pay_visibility'),
+
+                    'status'          => 'published',
+                    'posted_at'       => now(),
                 ]);
 
                 // Pivot: skills
@@ -207,24 +282,18 @@ class SavedJobController extends Controller
                     $job->benefits()->sync($benefits);
                 }
 
-                // job_descriptions: responsibilities & requirements as separate rows
-                $makeDescriptions = function (array $items = null, string $type) use ($job) {
-                    if (empty($items)) return;
-                    foreach ($items as $content) {
-                        $content = trim((string) $content);
-                        if ($content === '') continue;
+                // job_descriptions bulk insert (overview/responsibility/requirement)
+                if (!empty($descRows)) {
+                    foreach ($descRows as $r) {
                         $job->descriptions()->create([
-                            'type'    => $type,      // 'responsibility' or 'requirement'
-                            'content' => $content,
+                            'type'    => $r['type'],
+                            'content' => $r['content'],
                         ]);
                     }
-                };
+                }
 
-                $makeDescriptions($request->input('responsibilities', []), 'responsibility');
-                $makeDescriptions($request->input('requirements', []), 'requirement');
-
-                // If you also want to capture a separate "why choose us" list into job_descriptions:
-                // $makeDescriptions($request->input('benefits_text', []), 'benefit'); // if you had textual benefits too
+                // Optionally persist company meta (if you actually store them elsewhere)
+                // $job->meta()->create([...]) or update related Company model, etc.
 
                 return response()->api(
                     ['job' => $job->load('skills', 'benefits', 'descriptions')],
@@ -233,10 +302,18 @@ class SavedJobController extends Controller
                     201
                 );
             });
-
         } catch (\Throwable $e) {
             return response()->api(null, true, $e->getMessage(), 500);
         }
+    }
+
+    /**
+     * Tiny helper: is array associative?
+     */
+    private static function isAssoc(array $arr): bool
+    {
+        if ([] === $arr) return false;
+        return array_keys($arr) !== range(0, count($arr) - 1);
     }
 
 }
