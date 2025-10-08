@@ -155,20 +155,20 @@ class JobApplicationController extends Controller
             DB::commit();
 
             // Send email to employer contact if we have an email
-            // if ($employerContact && !empty($employerContact->email)) {
+             if ($employerContact && !empty($employerContact->email)) {
                 try {
                     Mail::to('bilalhsn226@gmail.com')
                         ->send(new JobApplicationReceived($job, $application));
                 } catch (\Throwable $mailEx) {
-                    dd($mailEx>getMessage());
-                    // \Log::warning('Failed to send employer application email', [
-                    //     'job_id'     => $job->uuid ?? $job->id,
-                    //     'to'         => $employerContact->email,
-                    //     'error'      => $mailEx->getMessage(),
-                    // ]);
+                    //dd($mailEx>getMessage());
+                    \Log::warning('Failed to send employer application email', [
+                        'job_id'     => $job->uuid ?? $job->id,
+                        'to'         => $employerContact->email,
+                        'error'      => $mailEx->getMessage(),
+                    ]);
                     // Don’t fail the API if email can’t be sent.
                 }
-            // }
+             }
 
             // Response in your standard shape
             return response()->api([
@@ -188,11 +188,10 @@ class JobApplicationController extends Controller
                 Storage::disk('public')->delete($resumePath);
             }
 
-            // \Log::error('Job application failed', [
-            //     'job_id' => $job->uuid ?? $job->id,
-            //     'error'  => $e->getMessage(),
-            // ]);
-  dd($e>getMessage());
+            \Log::error('Job application failed', [
+                'job_id' => $job->uuid ?? $job->id,
+                'error'  => $e->getMessage(),
+            ]);
             return response()->api(null, true, 'Failed to submit application. Please try again.', 500);
         }
     }
