@@ -10,14 +10,20 @@ use App\Models\Employer;
 use App\Models\EmployerUser;
 use App\Models\JobDescription;
 use App\Models\Job;
+use Faker\Factory as FakerFactory;
 
 class EmployerSeeder extends Seeder
 {
+    // Optional: uncomment if you want to silence model events during seeding
+    // use WithoutModelEvents;
+
     /**
      * Run the database seeds.
      */
     public function run(): void
     {
+        $faker = FakerFactory::create();
+
         // ------------------------------
         // Seed baseline job benefits
         // ------------------------------
@@ -46,9 +52,9 @@ class EmployerSeeder extends Seeder
         // ------------------------------
         for ($i = 0; $i < 200; $i++) {
             $employer = Employer::create([
-                'company_name' => fake()->company(),
-                'website' => fake()->optional()->url(),
-                'country_code' => fake()->randomElement(['US','GB','IN','DE','CA']),
+                'company_name' => $faker->company(),
+                'website' => $faker->optional()->url(),
+                'country_code' => $faker->randomElement(['US','GB','IN','DE','CA']),
             ]);
 
             // Owner user for employer
@@ -81,28 +87,28 @@ class EmployerSeeder extends Seeder
             // ------------------------------
             $numJobs = rand(3, 7);
             for ($j = 0; $j < $numJobs; $j++) {
-                $title = fake()->jobTitle();
+                $title = $faker->jobTitle();
 
                 $job = Job::create([
                     'employer_id' => $employer->id,
                     'title' => $title,
                     'slug' => Str::slug($title.'-'.uniqid()),
                     'description' => null, // moved to job_descriptions
-                    'location_type' => fake()->randomElement($locationTypes),
-                    'city' => fake()->optional()->city(),
-                    'state_province' => fake()->optional()->state(),
+                    'location_type' => $faker->randomElement($locationTypes),
+                    'city' => $faker->optional()->city(),
+                    'state_province' => $faker->optional()->state(),
                     'country_code' => $employer->country_code,
                     'country_name' => $employer->country_code,
                     'location' => null,
-                    'job_type' => fake()->randomElement($jobTypes),
-                    'pay_visibility' => fake()->randomElement(['range','exact','starting_at']),
-                    'pay_min' => fake()->optional()->randomFloat(2, 30000, 120000),
-                    'pay_max' => fake()->optional()->randomFloat(2, 80000, 200000),
+                    'job_type' => $faker->randomElement($jobTypes),
+                    'pay_visibility' => $faker->randomElement(['range','exact','starting_at']),
+                    'pay_min' => $faker->optional()->randomFloat(2, 30000, 120000),
+                    'pay_max' => $faker->optional()->randomFloat(2, 80000, 200000),
                     'currency' => 'USD',
-                    'pay_period' => fake()->optional()->randomElement($payPeriods),
-                    'status' => fake()->randomElement(['draft','published']),
-                    'is_featured' => fake()->boolean(20),
-                    'is_pinned' => fake()->boolean(10),
+                    'pay_period' => $faker->optional()->randomElement($payPeriods),
+                    'status' => $faker->randomElement(['draft','published']),
+                    'is_featured' => $faker->boolean(20),
+                    'is_pinned' => $faker->boolean(10),
                     'posted_at' => now()->subDays(rand(0, 60)),
                 ]);
 
@@ -111,11 +117,11 @@ class EmployerSeeder extends Seeder
                 // ------------------------------
                 DB::table('job_preferences')->insert([
                     'job_id' => $job->id,
-                    'daily_updates_email' => fake()->optional()->safeEmail(),
-                    'notify_each_application' => fake()->boolean(60),
-                    'resume_required' => fake()->boolean(80),
-                    'allow_candidate_email' => fake()->boolean(40),
-                    'hiring_timeline' => fake()->randomElement(['asap','1_2_weeks','2_4_weeks','1_3_months','flexible']),
+                    'daily_updates_email' => $faker->optional()->safeEmail(),
+                    'notify_each_application' => $faker->boolean(60),
+                    'resume_required' => $faker->boolean(80),
+                    'allow_candidate_email' => $faker->boolean(40),
+                    'hiring_timeline' => $faker->randomElement(['asap','1_2_weeks','2_4_weeks','1_3_months','flexible']),
                     'hires_planned_30d' => rand(1, 5),
                     'created_at' => now(),
                     'updated_at' => now(),
@@ -139,9 +145,9 @@ class EmployerSeeder extends Seeder
                 foreach (range(1, rand(2, 4)) as $q) {
                     DB::table('job_screening_questions')->insert([
                         'job_id' => $job->id,
-                        'question' => fake()->sentence(rand(6, 10)),
-                        'type' => fake()->randomElement(['text','boolean','number']),
-                        'is_required' => fake()->boolean(70),
+                        'question' => $faker->sentence(rand(6, 10)),
+                        'type' => $faker->randomElement(['text','boolean','number']),
+                        'is_required' => $faker->boolean(70),
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
@@ -168,9 +174,9 @@ class EmployerSeeder extends Seeder
                 // ------------------------------
                 // Job Descriptions (NEW TABLE)
                 // ------------------------------
-                $overview = fake()->paragraph();
-                $requirements = fake()->sentences(rand(3, 5));
-                $responsibilities = fake()->sentences(rand(3, 5));
+                $overview = $faker->paragraph();
+                $requirements = $faker->sentences(rand(3, 5));
+                $responsibilities = $faker->sentences(rand(3, 5));
 
                 JobDescription::insert([
                     [
