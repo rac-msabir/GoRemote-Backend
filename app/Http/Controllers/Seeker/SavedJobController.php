@@ -204,6 +204,7 @@ class SavedJobController extends Controller
                     'overview'         => 'overview',
                     'responsibilities' => 'responsibility',
                     'requirements'     => 'requirement',
+                    'benefits'         => 'benefit',
                     default            => null, // ignore unknown keys
                 };
             };
