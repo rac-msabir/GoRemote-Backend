@@ -33,7 +33,7 @@ Route::post('/post-job', [\App\Http\Controllers\Seeker\SavedJobController::class
 
 Route::post('/jobs/{job}/apply', [\App\Http\Controllers\JobApplicationController::class, 'apply'])->middleware('auth:sanctum');
 
-
+Route::get('/my/applications', [\App\Http\Controllers\JobApplicationController::class, 'getApplications'])->middleware('auth:sanctum');
 
 
 // Companies

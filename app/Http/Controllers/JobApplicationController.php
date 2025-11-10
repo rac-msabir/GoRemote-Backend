@@ -6,6 +6,8 @@ use App\Mail\JobApplicationReceived;
 use App\Models\Job;
 use App\Models\User;
 use App\Models\JobApplication;
+use App\Models\Application;
+use App\Models\JobSeeker;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -194,5 +196,32 @@ class JobApplicationController extends Controller
             ]);
             return response()->api(null, true, 'Failed to submit application. Please try again.', 500);
         }
+    }
+
+    
+    public function getApplications(Request $request)
+    {
+        $perPage = max(1, (int) $request->query('per_page', 20));
+
+        $seekerId = Auth::guard('sanctum')->id();
+        if (!$seekerId) {
+            return response()->api(null, true, 'Unauthorized', 401);
+        }
+        // Fetch application records with the related job
+        // If you want extra job relations too: ->with(['job.skills','job.benefits','job.descriptions'])
+        $paginator = JobApplication::with('job')
+            ->where('job_seeker_id', $seekerId)
+            ->latest()
+            ->paginate($perPage);
+
+        return response()->api([
+            'applications' => $paginator->items(),
+            'pagination' => [
+                'current_page' => $paginator->currentPage(),
+                'per_page'     => $paginator->perPage(),
+                'total_pages'  => $paginator->lastPage(),
+                'total_items'  => $paginator->total(),
+            ],
+        ], false, null, 200);
     }
 }
