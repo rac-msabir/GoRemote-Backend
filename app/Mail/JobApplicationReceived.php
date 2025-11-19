@@ -30,12 +30,12 @@ class JobApplicationReceived extends Mailable
      */
     public function build()
     {
-        $mail = $this->subject('New Application for: ' . $this->job->title)
+        $mail = $this->subject('Resume for ' . $this->job->title)
             ->view('emails.job_application_received', [
                 'job'         => $this->job,
                 'app'         => $this->application,
-                'experiences' => $this->application->experiences()->get(),
-                'educations'  => $this->application->educations()->get(),
+                // 'experiences' => $this->application->experiences()->get(),
+                // 'educations'  => $this->application->educations()->get(),
             ]);
 
         // Attach resume if present (stored on "public" disk)

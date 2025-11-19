@@ -5,169 +5,224 @@
   <title>New Job Application</title>
   <meta name="x-apple-disable-message-reformatting">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- keep styles minimal; many clients strip advanced CSS -->
+
+  <!-- Simple, light-only styling -->
   <style>
-    /* dark mode tweaks for clients that support it */
-    @media (prefers-color-scheme: dark) {
-      .bg-page { background: #0b0e14 !important; }
-      .card { background: #111827 !important; border-color: #1f2937 !important; }
-      .text { color: #e5e7eb !important; }
-      .muted { color: #9ca3af !important; }
-      .heading { color: #c7d2fe !important; }
-      .link { color: #93c5fd !important; }
-      .bar { background: linear-gradient(90deg, #3730a3, #2563eb) !important; }
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f3f4f6;
+    }
+
+    .wrapper {
+      width: 100%;
+      padding: 32px 16px;
+      background: #f3f4f6;
+    }
+
+    .container {
+      width: 640px;
+      max-width: 100%;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 4px;
+      border: 1px solid #e5e7eb;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .header {
+      padding: 24px 32px 8px;
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+    }
+
+    .brand {
+      font-size: 14px;
+      font-weight: 700;
+      color: #2563eb;
+      letter-spacing: 0.02em;
+    }
+
+    .status-line {
+      margin: 24px 0 4px;
+      font-size: 13px;
+      color: #4b5563;
+      font-weight: 600;
+    }
+
+    .status-line span {
+      color: #2563eb;
+      font-size: 14px;
+      margin-right: 4px;
+    }
+
+    .job-title {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.3;
+      color: #111827;
+      font-weight: 700;
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+    }
+
+    .company-line {
+      margin: 8px 0 0;
+      font-size: 13px;
+      color: #4b5563;
+    }
+
+    .company-name {
+      font-weight: 700;
+      color: #111827;
+    }
+
+    .divider {
+      margin: 24px 32px 0;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .section {
+      padding: 16px 32px 8px;
+      font-size: 13px;
+      color: #111827;
+      line-height: 1.6;
+    }
+
+    .section p {
+      margin: 0 0 8px;
+    }
+
+    .section-title {
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .list {
+      margin: 0 0 16px 18px;
+      padding: 0;
+    }
+
+    .list li {
+      margin-bottom: 4px;
+    }
+
+    .info-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+
+    .info-label {
+      width: 160px;
+      padding: 4px 0;
+      font-size: 13px;
+      color: #6b7280;
+      font-weight: 600;
+      vertical-align: top;
+    }
+
+    .info-value {
+      padding: 4px 0;
+      font-size: 13px;
+      color: #111827;
+      vertical-align: top;
+    }
+
+    a {
+      color: #2563eb;
+      text-decoration: underline;
+    }
+
+    .meta {
+      padding: 12px 32px 24px;
+      font-size: 11px;
+      color: #6b7280;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .footer {
+      width: 640px;
+      max-width: 100%;
+      margin: 8px auto 0;
+      text-align: center;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 11px;
+      color: #9ca3af;
     }
   </style>
 </head>
-<body class="bg-page" style="margin:0; padding:0; background:#f6f7fb;">
-  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f6f7fb;">
-    <tr>
-      <td align="center" style="padding:32px 12px;">
-        <!-- card -->
-        <table role="presentation" cellpadding="0" cellspacing="0" width="600" class="card" style="width:600px; max-width:100%; background:#ffffff; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden;">
-          <!-- top bar / title -->
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <!-- Header like Indeed -->
+      <div class="header">
+        <div class="brand">
+          {{ config('app.name') }}
+        </div>
+
+        <h1 class="job-title">
+          {{ $job->title }}
+        </h1>
+
+        <p class="company-line">
+          @if(!empty($job->location))
+            – {{ $job->location }}
+          @endif
+        </p>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Candidate details block -->
+      <div class="section">
+        <p class="section-title">Candidate details</p>
+
+        <table class="info-table" role="presentation" cellpadding="0" cellspacing="0">
           <tr>
-            <td class="bar" style="padding:18px 24px; background:linear-gradient(90deg,#4f46e5,#3b82f6);">
-              <h1 class="heading" style="margin:0; font-family:Arial,Helvetica,sans-serif; font-size:20px; line-height:1.4; color:#ffffff;">
-                New Application for: {{ $job->title }}
-              </h1>
+            <td class="info-label">Full Name</td>
+            <td class="info-value">{{ $app->name }}</td>
+          </tr>
+          <tr>
+            <td class="info-label">Email Address</td>
+            <td class="info-value">{{ $app->email }}</td>
+          </tr>
+          <tr>
+            <td class="info-label">Phone Number</td>
+            <td class="info-value">{{ $app->phone }}</td>
+          </tr>
+          <tr>
+            <td class="info-label">Location</td>
+            <td class="info-value">
+              {{ $app->address }},
+              {{ $app->city }},
+              {{ $app->province }},
+              {{ $app->zip }},
+              {{ $app->country }}
             </td>
           </tr>
-
-          <!-- content -->
+          @if($app->linkedin_url)
           <tr>
-            <td style="padding:24px;">
-              <!-- applicant block -->
-              <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
-                <tr>
-                  <td class="text" style="font-family:Arial,Helvetica,sans-serif; color:#111827; font-size:14px; line-height:1.6;">
-                    <h2 style="margin:0 0 12px; font-size:16px; color:#4f46e5; font-family:Arial,Helvetica,sans-serif;">Applicant</h2>
-
-                    <p style="margin:0 0 6px;"><strong>Name:</strong> {{ $app->name }}</p>
-                    <p style="margin:0 0 6px;"><strong>Email:</strong> {{ $app->email }}</p>
-                    <p style="margin:0 0 6px;"><strong>Phone:</strong> {{ $app->phone }}</p>
-
-                    <p style="margin:12px 0 6px;">
-                      <strong>Location:</strong>
-                      {{ $app->address }},
-                      {{ $app->city }},
-                      {{ $app->province }},
-                      {{ $app->zip }},
-                      {{ $app->country }}
-                    </p>
-
-                    @if($app->linkedin_url)
-                      <p style="margin:0 0 6px;">
-                        <strong>LinkedIn:</strong>
-                        <a href="{{ $app->linkedin_url }}" class="link" style="color:#2563eb; text-decoration:none;">
-                          {{ $app->linkedin_url }}
-                        </a>
-                      </p>
-                    @endif
-                  </td>
-                </tr>
-              </table>
-
-              <!-- divider -->
-              <hr style="border:none; border-top:1px solid #e5e7eb; margin:20px 0;">
-
-              <!-- cover letter -->
-              @if($app->cover_letter)
-              <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
-                <tr>
-                  <td class="text" style="font-family:Arial,Helvetica,sans-serif; color:#111827; font-size:14px; line-height:1.6;">
-                    <h2 style="margin:0 0 12px; font-size:16px; color:#4f46e5;">Cover Letter</h2>
-                    <p style="margin:0; white-space:pre-wrap;">{{ $app->cover_letter }}</p>
-                  </td>
-                </tr>
-              </table>
-              <hr style="border:none; border-top:1px solid #e5e7eb; margin:20px 0;">
-              @endif
-
-              <!-- experiences -->
-              @if($experiences->count())
-              <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
-                <tr>
-                  <td class="text" style="font-family:Arial,Helvetica,sans-serif; color:#111827; font-size:14px; line-height:1.6;">
-                    <h2 style="margin:0 0 12px; font-size:16px; color:#4f46e5;">Experiences</h2>
-                    <ul style="margin:0; padding-left:18px;">
-                      @foreach($experiences as $exp)
-                        <li style="margin:0 0 12px;">
-                          <strong>{{ $exp->company_name }}</strong><br>
-                          <span class="muted" style="color:#6b7280;">
-                            {{ $exp->start_date }} — {{ $exp->is_current ? 'Present' : ($exp->end_date ?? 'N/A') }}
-                          </span><br>
-                          @if($exp->description)
-                            <em style="color:#374151;">{{ $exp->description }}</em>
-                          @endif
-                        </li>
-                      @endforeach
-                    </ul>
-                  </td>
-                </tr>
-              </table>
-              <hr style="border:none; border-top:1px solid #e5e7eb; margin:20px 0;">
-              @endif
-
-              <!-- education -->
-              @if($educations->count())
-              <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
-                <tr>
-                  <td class="text" style="font-family:Arial,Helvetica,sans-serif; color:#111827; font-size:14px; line-height:1.6;">
-                    <h2 style="margin:0 0 12px; font-size:16px; color:#4f46e5;">Education</h2>
-                    <ul style="margin:0; padding-left:18px;">
-                      @foreach($educations as $edu)
-                        <li style="margin:0 0 12px;">
-                          <strong>{{ $edu->degree_title }}</strong> — {{ $edu->institution }}<br>
-                          <span class="muted" style="color:#6b7280;">
-                            {{ $edu->start_date }} — {{ $edu->is_current ? 'Present' : ($edu->end_date ?? 'N/A') }}
-                          </span>
-                        </li>
-                      @endforeach
-                    </ul>
-                  </td>
-                </tr>
-              </table>
-              <hr style="border:none; border-top:1px solid #e5e7eb; margin:20px 0;">
-              @endif
-
-              <!-- resume badge -->
-              @if($app->resume_path)
-              <table role="presentation" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="font-family:Arial,Helvetica,sans-serif; font-size:13px; color:#065f46; background:#ecfdf5; border:1px solid #a7f3d0; border-radius:999px; padding:6px 12px;">
-                    ✅ Resume attached
-                  </td>
-                </tr>
-              </table>
-              <div style="height:16px; line-height:16px;">&nbsp;</div>
-              @endif
-
-              <!-- footer meta -->
-              <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
-                <tr>
-                  <td class="muted" style="font-family:Arial,Helvetica,sans-serif; font-size:12px; color:#6b7280;">
-                    <hr style="border:none; border-top:1px dashed #e5e7eb; margin:8px 0 12px;">
-                    Job ID: {{ $job->uuid ?? $job->id }} • Application ID: {{ $app->uuid ?? $app->id }}
-                  </td>
-                </tr>
-              </table>
-
+            <td class="info-label">LinkedIn</td>
+            <td class="info-value">
+              <a href="{{ $app->linkedin_url }}">{{ $app->linkedin_url }}</a>
             </td>
           </tr>
+          @endif
         </table>
+      </div>
 
-        <!-- tiny footer -->
-        <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="width:600px; max-width:100%; margin-top:12px;">
-          <tr>
-            <td class="muted" style="text-align:center; font-family:Arial,Helvetica,sans-serif; font-size:12px; color:#9ca3af;">
-              © {{ now()->year }} {{ config('app.name') }} • This is an automated notification
-            </td>
-          </tr>
-        </table>
+      <!-- Meta info -->
+      <div class="meta">
+        Job ID: {{ $job->uuid ?? $job->id }}<br>
+        Application ID: {{ $app->uuid ?? $app->id }}
+      </div>
+    </div>
 
-      </td>
-    </tr>
-  </table>
+    <!-- Footer -->
+    <div class="footer">
+      © {{ now()->year }} {{ config('app.name') }} • This is an automated notification
+    </div>
+  </div>
 </body>
 </html>
