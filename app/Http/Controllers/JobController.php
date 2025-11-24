@@ -324,6 +324,7 @@ class JobController extends Controller
             }
 
             $company = [
+                'id'           => $row->uuid,
                 'name'         => $row->company_name ?? 'Unknown Company',
                 'location'     => $row->location_type === 'remote'
                     ? 'Remote'

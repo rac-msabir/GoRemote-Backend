@@ -35,6 +35,8 @@ Route::post('/jobs/{job}/apply', [\App\Http\Controllers\JobApplicationController
 
 Route::get('/my/applications', [\App\Http\Controllers\JobApplicationController::class, 'getApplications'])->middleware('auth:sanctum');
 
+Route::get('/employers', [App\Http\Controllers\Employer\EmployerController::class, 'index']);
+Route::get('/employers/{employer}/jobs', [App\Http\Controllers\Employer\EmployerController::class, 'employerListDetail']);
 
 // Companies
 Route::get('/companies', [\App\Http\Controllers\CompanyController::class, 'index']);
