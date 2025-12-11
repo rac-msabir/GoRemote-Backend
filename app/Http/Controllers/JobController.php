@@ -31,6 +31,7 @@ class JobController extends Controller
             ->select([
                 'jobs.*',
                 'employers.company_name as company_name',
+                'employers.uuid as emp_id',
                 'employers.website as employer_website',
                 'employers.image as company_logo',
                 'categories.name as category_name',
@@ -298,7 +299,6 @@ class JobController extends Controller
                 ->groupBy('job_id')
                 ->map(fn($rows) => $rows->pluck('name')->all());
         }
-
         /** --------------- Shape response --------------- */
         $data = collect($paginator->items())->map(function ($row) use ($appByJob, $savedByJob, $benefitsByJob) {
             $postedAt = $row->posted_at ?: $row->created_at;
@@ -324,7 +324,7 @@ class JobController extends Controller
             }
 
             $company = [
-                'id'           => $row->uuid,
+                'id'           => $row->emp_id,
                 'name'         => $row->company_name ?? 'Unknown Company',
                 'location'     => $row->location_type === 'remote'
                     ? 'Remote'

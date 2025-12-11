@@ -18,6 +18,9 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 Route::get('/find-seekers', [\App\Http\Controllers\Seeker\UserController::class, 'findSeeker']);
 
+Route::get('/user-profile', [\App\Http\Controllers\Seeker\UserController::class, 'profileView'])->middleware('auth:sanctum');
+Route::post('/update-user-profile', [\App\Http\Controllers\Seeker\UserController::class, 'profileUpdate'])->middleware('auth:sanctum');
+
 // Jobs browsing (public + authed)
 Route::get('/jobs', [\App\Http\Controllers\JobController::class, 'index']);
 Route::get('/jobs/filter', [\App\Http\Controllers\JobController::class, 'index']);

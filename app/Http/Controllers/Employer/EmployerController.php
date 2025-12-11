@@ -32,16 +32,17 @@ class EmployerController extends Controller
    public function employerListDetail(Request $request, Employer $employer)
     {
         try {
-            // Get full employer record + all job columns
-            $employer = Employer::with([
+            // $employer is already fetched by uuid here
+
+            $employer->load([
                 'jobs' => function ($query) {
-                    $query->latest('posted_at'); // sirf order, koi select nahi
+                    $query->latest('posted_at');
                 },
-            ])->findOrFail($employer->id);
+            ]);
 
             $data = [
                 'message'  => 'Employer and jobs fetched successfully',
-                'employer' => $employer, // pura model with all attributes + jobs relation
+                'employer' => $employer,
             ];
 
             return response()->api($data);
