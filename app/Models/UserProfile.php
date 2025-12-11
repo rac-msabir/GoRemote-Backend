@@ -25,6 +25,7 @@ class UserProfile extends Model
         'current_company',
         'years_of_experience',
         'resume_path',
+        'cover_letter'
     ];
 
     protected $casts = [
