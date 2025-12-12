@@ -740,7 +740,7 @@ class JobController extends Controller
         ]);
     }
 
-     public function getSavedJobs(Request $request)
+    public function getSavedJobs(Request $request)
     {
         $perPage = max(1, (int) $request->query('per_page', 20));
 
@@ -748,7 +748,8 @@ class JobController extends Controller
         if (!$userId) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        // Get job_seeker_id from job_seekers table
+
+        // 1) Resolve job seeker once
         $seekerId = \App\Models\JobSeeker::where('user_id', $userId)->value('id');
         if (!$seekerId) {
             return response()->json([
@@ -757,12 +758,36 @@ class JobController extends Controller
                     'current_page' => 1,
                     'total_pages'  => 0,
                     'total_jobs'   => 0,
-                ]
+                ],
             ]);
         }
 
-        // Fetch saved jobs
-        $query = Job::query()
+        // 2) PAGE ON saved_jobs ONLY (cheap) and keep the created_at order
+        $savedPaginator = DB::table('saved_jobs as sj')
+            ->select('sj.job_id', 'sj.created_at')
+            ->where('sj.job_seeker_id', $seekerId)
+            ->orderBy('sj.created_at', 'desc')
+            ->paginate($perPage);
+
+        $savedRows = collect($savedPaginator->items());
+
+        // no saved jobs on this page
+        if ($savedRows->isEmpty()) {
+            return response()->json([
+                'data' => [],
+                'pagination' => [
+                    'current_page' => $savedPaginator->currentPage(),
+                    'total_pages'  => $savedPaginator->lastPage(),
+                    'total_jobs'   => $savedPaginator->total(),
+                ],
+            ]);
+        }
+
+        $jobIds = $savedRows->pluck('job_id')->all();
+
+        // 3) Fetch ALL jobs in a single query (no heavy join in paginator)
+        $jobs = Job::query()
+            ->with(['descriptions']) 
             ->select([
                 'jobs.*',
                 'employers.company_name as company_name',
@@ -771,99 +796,123 @@ class JobController extends Controller
             ])
             ->leftJoin('employers', 'employers.id', '=', 'jobs.employer_id')
             ->leftJoin('categories', 'categories.id', '=', 'jobs.category_id')
-            ->join('saved_jobs as sj', 'sj.job_id', '=', 'jobs.id')
-            ->where('sj.job_seeker_id', $seekerId)
+            ->whereIn('jobs.id', $jobIds)
             ->where('jobs.status', 'published')
-            ->orderBy('sj.created_at', 'desc');
+            ->get()
+            ->keyBy('id'); // so we can do $jobs[$jobId]
+ 
+        // 4) Benefits for all saved jobs
+        $benefitsByJob = DB::table('job_benefit_job as jb')
+            ->join('job_benefits as b', 'b.id', '=', 'jb.job_benefit_id')
+            ->whereIn('jb.job_id', $jobIds)
+            ->orderBy('b.name')
+            ->get(['jb.job_id', 'b.name'])
+            ->groupBy('job_id')
+            ->map(fn($rows) => $rows->pluck('name')->all());
 
-        $paginator = $query->paginate($perPage);
+        // 5) Applications for these jobs (⚠️ use $seekerId, not $userId)
+        $appByJob = DB::table('job_applications as ja')
+            ->select('ja.job_id', 'ja.job_seeker_id')
+            ->where('ja.job_seeker_id', $seekerId)
+            ->whereIn('ja.job_id', $jobIds)
+            ->get()
+            ->keyBy('job_id');
+               
+        // 6) Shape response in the SAME order as saved_jobs paginator
+        $data = $savedRows->map(function ($savedRow) use ($jobs, $benefitsByJob, $appByJob) {
+            $job = $jobs->get($savedRow->job_id);
 
-        $jobIds = collect($paginator->items())->pluck('id')->all();
+            // job might have been unpublished or deleted
+            if (!$job) {
+                return null;
+            }
 
-        // Benefits for all saved jobs
-        $benefitsByJob = collect();
-        if ($jobIds) {
-            $benefitsByJob = DB::table('job_benefit_job as jb')
-                ->join('job_benefits as b', 'b.id', '=', 'jb.job_benefit_id')
-                ->whereIn('jb.job_id', $jobIds)
-                ->orderBy('b.name')
-                ->get(['jb.job_id', 'b.name'])
-                ->groupBy('job_id')
-                ->map(fn($rows) => $rows->pluck('name')->all());
-        }
-        // Applications for these jobs
-        $appByJob = collect();
-        if ($jobIds) {
-            $appByJob = DB::table('job_applications as ja')
-                ->select('ja.job_id', 'ja.job_seeker_id')
-                ->where('ja.job_seeker_id', $userId)
-                ->whereIn('ja.job_id', $jobIds)
-                ->get()
-                ->keyBy('job_id');
-        }
-        // Shape response
-        $data = collect($paginator->items())->map(function ($row) use ($benefitsByJob, $appByJob) {
-            $postedAt = $row->posted_at ?: $row->created_at;
-            $closedAt = $row->closed_at;
-            $isNew    = $postedAt ? Carbon::parse($postedAt)->greaterThanOrEqualTo(now()->subDays(7)) : false;
-            $isFeat   = ($row->pay_max && $row->pay_max >= 150000) || ($isNew && $row->job_type === 'full_time');
+            $postedAt = $job->posted_at ?: $job->created_at;
+            $closedAt = $job->closed_at;
+
+            $postedCarbon = $postedAt ? \Carbon\Carbon::parse($postedAt) : null;
+            $closedCarbon = $closedAt ? \Carbon\Carbon::parse($closedAt) : null;
+
+            $isNew  = $postedCarbon
+                ? $postedCarbon->greaterThanOrEqualTo(now()->subDays(7))
+                : false;
+
+            $isFeat = ($job->pay_max && $job->pay_max >= 150000)
+                || ($isNew && $job->job_type === 'full_time');
 
             $tags = [];
-            if ($isFeat) $tags[] = 'Featured';
-            if ($row->job_type) $tags[] = self::humanizeJobType($row->job_type);
-            if ($row->location_type === 'remote') $tags[] = 'Remote';
+            if ($isFeat) {
+                $tags[] = 'Featured';
+            }
+            if ($job->job_type) {
+                $tags[] = self::humanizeJobType($job->job_type);
+            }
+            if ($job->location_type === 'remote') {
+                $tags[] = 'Remote';
+            }
 
             $salaryRange = null;
-            if ($row->pay_min || $row->pay_max) {
-                $fmt = fn ($v) => is_null($v) ? null : ('$' . number_format((float)$v / 1000, 0) . 'k');
-                $min = $fmt($row->pay_min);
-                $max = $fmt($row->pay_max);
+            if ($job->pay_min || $job->pay_max) {
+                $fmt = fn($v) => is_null($v)
+                    ? null
+                    : ('$' . number_format((float) $v / 1000, 0) . 'k');
+
+                $min = $fmt($job->pay_min);
+                $max = $fmt($job->pay_max);
+
                 $salaryRange = $min && $max ? "$min - $max" : ($min ?: $max);
             }
 
             $company = [
-                'name'     => $row->company_name ?? 'Unknown Company',
-                'location' => $row->location_type === 'remote'
+                'name'     => $job->company_name ?? 'Unknown Company',
+                'location' => $job->location_type === 'remote'
                     ? 'Remote'
-                    : (trim(implode(', ', array_filter([$row->city, $row->state_province, $row->country_code]))) ?: $row->country_code),
-                'website'  => $row->employer_website,
+                    : (trim(implode(', ', array_filter([
+                        $job->city,
+                        $job->state_province,
+                        $job->country_code,
+                    ]))) ?: $job->country_code),
+                'website'  => $job->employer_website,
             ];
 
-            $benef = $benefitsByJob->get($row->id, []);
-            $app   = $appByJob->get($row->id);
-
+            $benef = $benefitsByJob->get($job->id, []);
+            $app   = $appByJob->get($job->id);
             return [
-                'id'              => $row->uuid,
-                'title'           => $row->title,
-                'company'         => $company,
-                'vacancies'       => $row->vacancies,
-                'job_type'        => self::humanizeJobType($row->job_type),
-                'salary_range'    => $salaryRange,
-                'tags'            => $tags,
-                'is_featured'     => (bool) $isFeat,
-                'is_new'          => (bool) $isNew,
-                'posted_at'       => optional($postedAt)->toISOString() ?? null,
-                'closed_at'       => optional($closedAt)->toISOString() ?? null,
-                'description'     => (string) $row->description,
-                'overview'        => $this->generateOverviewFromDescription($row->description),
-                'requirements'    => $this->generateRequirementsFromDescription($row->description),
-                'responsibilities'=> $this->generateResponsibilitiesFromDescription($row->description),
-                'benefits'        => $benef,
-                'application_link'=> $company['website'] ?: null,
-                'is_saved'        => true,  // always true here
-                'has_applied'     => (bool) $app, // ✅ added like index()
+                'id'               => $job->uuid,
+                'title'            => $job->title,
+                'company'          => $company,
+                'vacancies'        => $job->vacancies,
+                'job_type'         => self::humanizeJobType($job->job_type),
+                'salary_range'     => $salaryRange,
+                'tags'             => $tags,
+                'is_featured'      => (bool) $isFeat,
+                'is_new'           => (bool) $isNew,
+                'posted_at'        => $postedCarbon?->toISOString(),
+                'closed_at'        => $closedCarbon?->toISOString(),
+                'description'      => (string) $job->description,
+                'overview'         => $this->generateOverviewFromDescription($job->descriptions),
+                'requirements'     => $this->generateRequirementsFromDescription($job->descriptions),
+                'responsibilities' => $this->generateResponsibilitiesFromDescription($job->descriptions),
+                'benefits'         => $benef,
+                'application_link' => $company['website'] ?: null,
+                'is_saved'         => true,
+                'has_applied'      => (bool) $app,
             ];
-        })->all();
+        })
+        ->filter() // remove nulls if any job was missing
+        ->values()
+        ->all();
 
         return response()->json([
             'data' => $data,
             'pagination' => [
-                'current_page' => $paginator->currentPage(),
-                'total_pages'  => $paginator->lastPage(),
-                'total_jobs'   => $paginator->total(),
+                'current_page' => $savedPaginator->currentPage(),
+                'total_pages'  => $savedPaginator->lastPage(),
+                'total_jobs'   => $savedPaginator->total(),
             ],
         ]);
     }
+
 
     public function getJobNames()
     {

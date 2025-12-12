@@ -203,20 +203,141 @@ class JobApplicationController extends Controller
     {
         $perPage = max(1, (int) $request->query('per_page', 20));
 
-        $seekerId = Auth::guard('sanctum')->id();
-        if (!$seekerId) {
+        // 1) Auth user
+        $userId = Auth::guard('sanctum')->id();
+        if (!$userId) {
             return response()->api(null, true, 'Unauthorized', 401);
         }
-        // Fetch application records with the related job
-        // If you want extra job relations too: ->with(['job.skills','job.benefits','job.descriptions'])
-        $paginator = JobApplication::with('job')
+
+        // 2) Resolve job_seeker_id (like in getSavedJobs)
+        $seekerId = \App\Models\JobSeeker::where('user_id', $userId)->value('id');
+        if (!$seekerId) {
+            return response()->api([
+                'applications' => [],
+                'pagination'   => [
+                    'current_page' => 1,
+                    'per_page'     => $perPage,
+                    'total_pages'  => 0,
+                    'total_items'  => 0,
+                ],
+            ], false, null, 200);
+        }
+
+        // 3) Load applications + related job + job.descriptions
+        $paginator = JobApplication::with([
+                'job.descriptions',
+            ])
             ->where('job_seeker_id', $seekerId)
             ->latest()
             ->paginate($perPage);
 
+        // 4) Shape response items
+        $applications = collect($paginator->items())
+            ->map(function (JobApplication $application) {
+                $job = $application->job;
+
+                // application might reference a deleted/unpublished job
+                if (!$job) {
+                    return null;
+                }
+
+                $postedAt  = $job->posted_at ?: $job->created_at;
+                $closedAt  = $job->closed_at;
+
+                $postedCarbon = $postedAt ? \Carbon\Carbon::parse($postedAt) : null;
+                $closedCarbon = $closedAt ? \Carbon\Carbon::parse($closedAt) : null;
+
+                // same style flags as saved jobs (adjust thresholds as you like)
+                $isNew = $postedCarbon
+                    ? $postedCarbon->greaterThanOrEqualTo(now()->subDays(7))
+                    : false;
+
+                $isFeat = ($job->pay_max && $job->pay_max >= 150000)
+                    || ($isNew && $job->job_type === 'full_time');
+
+                $tags = [];
+                if ($isFeat) {
+                    $tags[] = 'Featured';
+                }
+                if ($job->job_type) {
+                    $tags[] = self::humanizeJobType($job->job_type);
+                }
+                if ($job->location_type === 'remote') {
+                    $tags[] = 'Remote';
+                }
+
+                // salary range like in getSavedJobs
+                $salaryRange = null;
+                if ($job->pay_min || $job->pay_max) {
+                    $fmt = fn ($v) => is_null($v)
+                        ? null
+                        : ('$' . number_format((float) $v / 1000, 0) . 'k');
+
+                    $min = $fmt($job->pay_min);
+                    $max = $fmt($job->pay_max);
+
+                    $salaryRange = $min && $max ? "$min - $max" : ($min ?: $max);
+                }
+
+                // basic company info (using job columns only)
+                $company = [
+                    'name'     => $job->company_name ?? 'Unknown Company',
+                    'location' => $job->location_type === 'remote'
+                        ? 'Remote'
+                        : (trim(implode(', ', array_filter([
+                            $job->city,
+                            $job->state_province,
+                            $job->country_code,
+                        ]))) ?: $job->country_code),
+                    'website'  => $job->employer_website ?? null,
+                ];
+
+                // 👇 Use your helpers that are already on the controller
+                $descriptions = $job->descriptions;
+
+                $overview         = $this->generateOverviewFromDescription($descriptions);
+                $requirements     = $this->generateRequirementsFromDescription($descriptions);
+                $responsibilities = $this->generateResponsibilitiesFromDescription($descriptions);
+
+                return [
+                    // application-level info
+                    'id'          => $application->id,
+                    'status'      => $application->status ?? null,
+                    'applied_at'  => optional($application->created_at)->toISOString(),
+
+                    // job-level info (similar style to getSavedJobs)
+                    'job' => [
+                        'id'               => $job->uuid,
+                        'title'            => $job->title,
+                        'company'          => $company,
+                        'vacancies'        => $job->vacancies,
+                        'job_type'         => self::humanizeJobType($job->job_type),
+                        'salary_range'     => $salaryRange,
+                        'tags'             => $tags,
+                        'is_featured'      => (bool) $isFeat,
+                        'is_new'           => (bool) $isNew,
+                        'posted_at'        => $postedCarbon?->toISOString(),
+                        'closed_at'        => $closedCarbon?->toISOString(),
+                        'description'      => (string) $job->description,
+
+                        // ✅ These come from job->descriptions via your helpers
+                        'overview'         => $overview,
+                        'requirements'     => $requirements,
+                        'responsibilities' => $responsibilities,
+
+                        // optional extras
+                        'application_link' => $company['website'] ?: null,
+                    ],
+                ];
+            })
+            ->filter()  // drop nulls where job was missing
+            ->values()
+            ->all();
+
+        // 5) Final API response
         return response()->api([
-            'applications' => $paginator->items(),
-            'pagination' => [
+            'applications' => $applications,
+            'pagination'   => [
                 'current_page' => $paginator->currentPage(),
                 'per_page'     => $paginator->perPage(),
                 'total_pages'  => $paginator->lastPage(),
@@ -224,4 +345,29 @@ class JobApplicationController extends Controller
             ],
         ], false, null, 200);
     }
+
+    private function generateOverviewFromDescription(?string $description): string
+    {
+        if (!$description) { return ''; }
+        // Take first 2-3 sentences as overview
+        $sentences = preg_split('/\.(\s+|$)/', $description, -1, PREG_SPLIT_NO_EMPTY);
+        $overviewSentences = array_slice($sentences, 0, 3);
+        return implode('. ', $overviewSentences) . '.';
+    }
+
+    private function generateRequirementsFromDescription(?string $description): array
+    {
+        if (!$description) { return []; }
+        // Heuristic: split into bullet-like sentences
+        $sentences = preg_split('/\.(\s+|$)/', $description, -1, PREG_SPLIT_NO_EMPTY);
+        return array_map(fn ($s) => trim($s), array_slice($sentences, 0, 5));
+    }
+
+    private function generateResponsibilitiesFromDescription(?string $description): array
+    {
+        if (!$description) { return []; }
+        $sentences = preg_split('/\.(\s+|$)/', $description, -1, PREG_SPLIT_NO_EMPTY);
+        return array_map(fn ($s) => trim($s), array_slice($sentences, 5, 5));
+    }
+
 }
