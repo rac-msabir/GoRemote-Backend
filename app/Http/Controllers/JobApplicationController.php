@@ -357,4 +357,19 @@ class JobApplicationController extends Controller
         return array_map(fn ($s) => trim($s), array_slice($sentences, 5, 5));
     }
 
+    private static function humanizeJobType(?string $jobType): string
+    {
+        if (!$jobType) { return ''; }
+        return match ($jobType) {
+            'full_time' => 'Full-Time',
+            'part_time' => 'Part-Time',
+            'temporary' => 'Temporary',
+            'contract' => 'Contract',
+            'internship' => 'Internship',
+            'fresher' => 'Fresher',
+            default => ucfirst(str_replace('_',' ', $jobType)),
+        };
+    }
+
+
 }
