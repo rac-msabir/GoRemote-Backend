@@ -209,25 +209,12 @@ class JobApplicationController extends Controller
             return response()->api(null, true, 'Unauthorized', 401);
         }
 
-        // 2) Resolve job_seeker_id (like in getSavedJobs)
-        $seekerId = \App\Models\JobSeeker::where('user_id', $userId)->value('id');
-        if (!$seekerId) {
-            return response()->api([
-                'applications' => [],
-                'pagination'   => [
-                    'current_page' => 1,
-                    'per_page'     => $perPage,
-                    'total_pages'  => 0,
-                    'total_items'  => 0,
-                ],
-            ], false, null, 200);
-        }
 
         // 3) Load applications + related job + job.descriptions
         $paginator = JobApplication::with([
                 'job.descriptions',
             ])
-            ->where('job_seeker_id', $seekerId)
+            ->where('job_seeker_id', $userId)
             ->latest()
             ->paginate($perPage);
 
