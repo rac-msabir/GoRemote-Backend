@@ -16,59 +16,126 @@ use Illuminate\Support\Facades\Auth;
 class UserController extends Controller
 {
     public function findSeeker(Request $request)
-    {
-        try {
-            $seekers = User::with([
+{
+    try {
+        $perPage = max(1, (int) $request->query('per_page', 100));
+
+        $seekers = User::query()
+            ->where('role', 'seeker')
+            ->select(['id', 'name', 'email']) // keep it light
+            ->with([
                 'profile',
+                // Experiences: current ones first, then by start_date desc
+                'experiences' => function ($q) {
+                    $q->orderByDesc('is_current')
+                      ->orderByDesc('start_date');
+                },
+
+                // Educations: current ones first, then by start_date desc
+                'educations' => function ($q) {
+                    $q->orderByDesc('is_current')
+                      ->orderByDesc('start_date');
+                },
+
+                // Desired titles on JobSeeker (already ordered by priority)
                 'jobSeeker.desiredTitles' => function ($q) {
                     $q->orderBy('priority', 'asc');
-                }
+                },
             ])
-            ->where('role', 'seeker')
-            ->paginate(10);
+            ->paginate($perPage);
 
-            if ($seekers->isEmpty()) {
-                return response()->api(null, true, 'No seekers found', 200);
-            }
+        // If absolutely no seekers in DB
+        if ($seekers->total() === 0) {
+            return response()->api([
+                'seekers'    => [],
+                'pagination' => [
+                    'current_page' => 1,
+                    'last_page'    => 1,
+                    'per_page'     => $perPage,
+                    'total'        => 0,
+                ],
+            ], false, null, 200);
+        }
 
-            // Transform seekers for frontend
-            $seekersTransformed = $seekers->map(function ($user) {
-                return [
-                    'id' => $user->id,
-                    'name' => $user->name ?? null,
-                    'email' => $user->email ?? null,
-                    'profile' => [
-                        'phone'   => $user->profile->phone ?? null,
-                        'city'    => $user->profile->city ?? null,
-                        'country' => $user->profile->country ?? null,
-                        'dob'     => $user->profile->dob ?? null,
-                        'gender'  => $user->profile->gender ?? null,
-                    ],
-                    'desired_titles' => $user->jobSeeker->desiredTitles->map(function ($title) {
+        // Transform seekers for frontend
+        $seekersTransformed = $seekers->getCollection()->map(function (User $user) {
+            return [
+                'id'    => $user->id,
+                'name'  => $user->name ?? null,
+                'email' => $user->email ?? null,
+
+                'profile' => [
+                    'phone'   => optional($user->profile)->phone,
+                    'city'    => optional($user->profile)->city,
+                    'country' => optional($user->profile)->country,
+                    'dob'     => optional($user->profile)->dob,
+                    'gender'  => optional($user->profile)->gender,
+                ],
+
+                // Desired titles from JobSeeker relation
+                'desired_titles' => optional(optional($user->jobSeeker)->desiredTitles)
+                    ->map(function ($title) {
                         return [
                             'id'       => $title->id,
                             'title'    => $title->title ?? null,
                             'priority' => $title->priority ?? null,
                         ];
-                    }),
-                ];
-            });
+                    })
+                    ->values()
+                    ->all() ?? [],
 
-            $data = [
-                'seekers' => $seekersTransformed,
-                'pagination' => [
-                    'current_page' => $seekers->currentPage(),
-                    'last_page'    => $seekers->lastPage(),
-                    'per_page'     => $seekers->perPage(),
-                    'total'        => $seekers->total(),
-                ],
+                // Experiences array (from user_experiences table)
+                'experiences' => $user->experiences
+                    ->map(function ($exp) {
+                        return [
+                            'id'          => $exp->id,
+                            'company_name'=> $exp->company_name ?? null,
+                            'job_title'   => $exp->job_title ?? null,
+                            'is_current'  => (bool) $exp->is_current,
+                            'start_date'  => $exp->start_date ? (string) $exp->start_date : null,
+                            'end_date'    => $exp->end_date ? (string) $exp->end_date : null,
+                            'description' => $exp->description ?? null,
+                            'location'    => $exp->location ?? null,
+                        ];
+                    })
+                    ->values()
+                    ->all(),
+
+                // Educations array (from user_educations table)
+                'educations' => $user->educations
+                    ->map(function ($edu) {
+                        return [
+                            'id'          => $edu->id,
+                            'degree_title'=> $edu->degree_title ?? null,
+                            'institution' => $edu->institution ?? null,
+                            'is_current'  => (bool) $edu->is_current,
+                            'start_date'  => $edu->start_date ? (string) $edu->start_date : null,
+                            'end_date'    => $edu->end_date ? (string) $edu->end_date : null,
+                            'description' => $edu->description ?? null,
+                            'gpa'         => $edu->gpa ?? null,
+                        ];
+                    })
+                    ->values()
+                    ->all(),
             ];
+        })->values();
 
-            return response()->api($data); // ✅ success response
-        } catch (\Throwable $e) {
-            return response()->api(null, true, $e->getMessage(), 500); // ✅ error response
-        }
+        $data = [
+            'seekers' => $seekersTransformed,
+            'pagination' => [
+                'current_page' => $seekers->currentPage(),
+                'last_page'    => $seekers->lastPage(),
+                'per_page'     => $seekers->perPage(),
+                'total'        => $seekers->total(),
+            ],
+        ];
+
+        return response()->api($data, false, null, 200);
+    } catch (\Throwable $e) {
+        return response()->api(null, true, $e->getMessage(), 500);
     }
+}
+
 
      public function profileView()
     {

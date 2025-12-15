@@ -209,12 +209,25 @@ class JobApplicationController extends Controller
             return response()->api(null, true, 'Unauthorized', 401);
         }
 
+        // 2) Resolve job seeker (like getSavedJobs)
+        $seekerId = \App\Models\JobSeeker::where('user_id', $userId)->value('id');
+        if (!$seekerId) {
+            return response()->api([
+                'applications' => [],
+                'pagination'   => [
+                    'current_page' => 1,
+                    'per_page'     => $perPage,
+                    'total_pages'  => 0,
+                    'total_items'  => 0,
+                ],
+            ], false, null, 200);
+        }
 
         // 3) Load applications + related job + job.descriptions
         $paginator = JobApplication::with([
                 'job.descriptions',
             ])
-            ->where('job_seeker_id', $userId)
+            ->where('job_seeker_id', $seekerId)
             ->latest()
             ->paginate($perPage);
 
@@ -234,7 +247,7 @@ class JobApplicationController extends Controller
                 $postedCarbon = $postedAt ? \Carbon\Carbon::parse($postedAt) : null;
                 $closedCarbon = $closedAt ? \Carbon\Carbon::parse($closedAt) : null;
 
-                // same style flags as saved jobs (adjust thresholds as you like)
+                // flags
                 $isNew = $postedCarbon
                     ? $postedCarbon->greaterThanOrEqualTo(now()->subDays(7))
                     : false;
@@ -253,7 +266,7 @@ class JobApplicationController extends Controller
                     $tags[] = 'Remote';
                 }
 
-                // salary range like in getSavedJobs
+                // salary range (same style as getSavedJobs)
                 $salaryRange = null;
                 if ($job->pay_min || $job->pay_max) {
                     $fmt = fn ($v) => is_null($v)
@@ -266,7 +279,7 @@ class JobApplicationController extends Controller
                     $salaryRange = $min && $max ? "$min - $max" : ($min ?: $max);
                 }
 
-                // basic company info (using job columns only)
+                // basic company info (using job columns)
                 $company = [
                     'name'     => $job->company_name ?? 'Unknown Company',
                     'location' => $job->location_type === 'remote'
@@ -279,25 +292,25 @@ class JobApplicationController extends Controller
                     'website'  => $job->employer_website ?? null,
                 ];
 
-                // 👇 Use your helpers that are already on the controller
-                $descriptions = $job->descriptions;
-
-                $overview         = $this->generateOverviewFromDescription($descriptions);
-                $requirements     = $this->generateRequirementsFromDescription($descriptions);
-                $responsibilities = $this->generateResponsibilitiesFromDescription($descriptions);
+                // ✅ grouped descriptions (overview, requirements, responsibilities, etc.)
+                $descriptions = collect($job->descriptions ?? [])
+                    ->groupBy('type')
+                    ->map(fn($items) => $items->pluck('content')->values()->all())
+                    ->all();
 
                 return [
                     // application-level info
-                    'id'          => $application->id,
-                    'status'      => $application->status ?? null,
-                    'applied_at'  => optional($application->created_at)->toISOString(),
+                    'id'         => $application->id,
+                    'status'     => $application->status ?? null,
+                    'applied_at' => optional($application->created_at)->toISOString(),
 
-                    // job-level info (similar style to getSavedJobs)
+                    // job-level info
                     'job' => [
                         'id'               => $job->uuid,
                         'title'            => $job->title,
                         'company'          => $company,
                         'vacancies'        => $job->vacancies,
+                        'location_type'    => $job->location_type,
                         'job_type'         => self::humanizeJobType($job->job_type),
                         'salary_range'     => $salaryRange,
                         'tags'             => $tags,
@@ -306,13 +319,7 @@ class JobApplicationController extends Controller
                         'posted_at'        => $postedCarbon?->toISOString(),
                         'closed_at'        => $closedCarbon?->toISOString(),
                         'description'      => (string) $job->description,
-
-                        // ✅ These come from job->descriptions via your helpers
-                        'overview'         => $overview,
-                        'requirements'     => $requirements,
-                        'responsibilities' => $responsibilities,
-
-                        // optional extras
+                        'descriptions'     => $descriptions,  // 👈 same structure as getSavedJobs
                         'application_link' => $company['website'] ?: null,
                     ],
                 ];
@@ -332,6 +339,7 @@ class JobApplicationController extends Controller
             ],
         ], false, null, 200);
     }
+
 
     private function generateOverviewFromDescription(?string $description): string
     {
