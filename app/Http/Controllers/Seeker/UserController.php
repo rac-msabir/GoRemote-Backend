@@ -7,7 +7,9 @@ use Illuminate\Http\Request;
 use App\Models\JobSeeker;
 use App\Models\User;
 use App\Models\UserProfile;     
+use App\Models\UserProject;
 use DB;
+use Illuminate\Support\Str;
 use App\Models\UserExperience;
 use App\Models\UserEducation;
 use App\Models\SeekerDesiredTitle;
@@ -147,7 +149,7 @@ class UserController extends Controller
         }
 
         // Load user with experiences and educations
-        $user = User::with(['profile','experiences', 'educations','profile'])->find($userId);
+        $user = User::with(['profile','experiences', 'educations','projects'])->find($userId);
 
         if (!$user) {
             return response()->api(null, false, 'User not found', 404);
@@ -167,80 +169,87 @@ class UserController extends Controller
         /** @var \App\Models\User $user */
         $user = User::findOrFail($userId);
 
-        // Validate basic fields + nested arrays
         $validated = $request->validate([
-            'name'           => ['required', 'string', 'max:255'],
-            'email'          => ['required', 'email', 'max:255'],
-            'phone'          => ['nullable', 'string', 'max:50'],
+            'name'  => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255'],
+            'phone' => ['nullable', 'string', 'max:50'],
 
-            'country'        => ['nullable', 'string', 'max:255'],
-            'province'       => ['nullable', 'string', 'max:255'],
-            'city'           => ['nullable', 'string', 'max:255'],
-            'zip'            => ['nullable', 'string', 'max:50'],
-            'address'        => ['nullable', 'string'],
+            'country'  => ['nullable', 'string', 'max:255'],
+            'province' => ['nullable', 'string', 'max:255'],
+            'city'     => ['nullable', 'string', 'max:255'],
+            'zip'      => ['nullable', 'string', 'max:50'],
+            'address'  => ['nullable', 'string'],
 
-            'linkedin_url'   => ['nullable', 'url'],
-            'cover_letter'   => ['nullable', 'string'],
-            'resume'         => ['nullable', 'file', 'mimes:pdf,doc,docx', 'max:10240'],
+            'linkedin_url' => ['nullable', 'url'],
+            'cover_letter' => ['nullable', 'string'],
+            'resume'       => ['nullable', 'file', 'mimes:pdf,doc,docx', 'max:10240'],
 
-            'experiences'                        => ['array'],
-            'experiences.*.company_name'         => ['nullable', 'string', 'max:255'],
-            'experiences.*.job_title'            => ['nullable', 'string', 'max:255'],
-            'experiences.*.is_current'           => ['nullable'],
-            'experiences.*.start_date'           => ['nullable', 'date'],
-            'experiences.*.end_date'             => ['nullable', 'date'],
-            'experiences.*.description'          => ['nullable', 'string'],
-            'experiences.*.location'             => ['nullable', 'string', 'max:255'],
+            'experiences'                => ['array'],
+            'experiences.*.company_name' => ['nullable', 'string', 'max:255'],
+            'experiences.*.job_title'    => ['nullable', 'string', 'max:255'],
+            'experiences.*.is_current'   => ['nullable'],
+            'experiences.*.start_date'   => ['nullable', 'date'],
+            'experiences.*.end_date'     => ['nullable', 'date'],
+            'experiences.*.description'  => ['nullable', 'string'],
+            'experiences.*.location'     => ['nullable', 'string', 'max:255'],
 
-            'educations'                         => ['array'],
-            'educations.*.degree_title'          => ['nullable', 'string', 'max:255'],
-            'educations.*.institution'           => ['nullable', 'string', 'max:255'],
-            'educations.*.is_current'            => ['nullable'],
-            'educations.*.start_date'            => ['nullable', 'date'],
-            'educations.*.end_date'              => ['nullable', 'date'],
-            'educations.*.description'           => ['nullable', 'string'],
-            'educations.*.gpa'                   => ['nullable', 'string', 'max:50'],
+            'educations'                   => ['array'],
+            'educations.*.degree_title'    => ['nullable', 'string', 'max:255'],
+            'educations.*.institution'     => ['nullable', 'string', 'max:255'],
+            'educations.*.is_current'      => ['nullable'],
+            'educations.*.start_date'      => ['nullable', 'date'],
+            'educations.*.end_date'        => ['nullable', 'date'],
+            'educations.*.description'     => ['nullable', 'string'],
+            'educations.*.gpa'             => ['nullable', 'string', 'max:50'],
+
+            // ✅ Projects validation (NEW)
+            'projects'                 => ['array'],
+            'projects.*.title'         => ['nullable', 'string', 'max:255'],
+            'projects.*.description'   => ['nullable', 'string'],
+            'projects.*.live_url'      => ['nullable', 'url', 'max:255'],
+            'projects.*.github_url'    => ['nullable', 'url', 'max:255'],
         ]);
 
         DB::beginTransaction();
 
         try {
-            // 1) Update user basic info
+            // 1) Update user
             $user->name  = $validated['name'];
             $user->email = $validated['email'];
             $user->save();
 
-            // 2) Create / update profile
+            // 2) Profile
             $profileData = [
-                'phone'          => $validated['phone'] ?? null,
-                'country'        => $validated['country'] ?? null,
-                'province'       => $validated['province'] ?? null,
-                'city'           => $validated['city'] ?? null,
-                'zip'            => $validated['zip'] ?? null,
-                'address'        => $validated['address'] ?? null,
-                'linkedin_url'   => $validated['linkedin_url'] ?? null,
-                'cover_letter'   => $validated['cover_letter'] ?? null,
+                'phone'        => $validated['phone'] ?? null,
+                'country'      => $validated['country'] ?? null,
+                'province'     => $validated['province'] ?? null,
+                'city'         => $validated['city'] ?? null,
+                'zip'          => $validated['zip'] ?? null,
+                'address'      => $validated['address'] ?? null,
+                'linkedin_url' => $validated['linkedin_url'] ?? null,
+                'cover_letter' => $validated['cover_letter'] ?? null,
             ];
 
-            // Handle resume upload if provided
             if ($request->hasFile('resume')) {
-                $file      = $request->file('resume');
-                $fileName  = Str::uuid()->toString() . '.' . $file->getClientOriginalExtension();
-                $filePath  = $file->storeAs('resumes', $fileName, 'public');
+                $file     = $request->file('resume');
+                $fileName = Str::uuid()->toString() . '.' . $file->getClientOriginalExtension();
+
+                $year  = now()->format('Y');
+                $month = now()->format('m');
+
+                $filePath = $file->storeAs("resumes/{$year}/{$month}", $fileName, 'public');
                 $profileData['resume_path'] = $filePath;
             }
 
-            // Assuming relation: $user->profile() (hasOne)
             $user->profile()->updateOrCreate(
                 ['user_id' => $user->id],
                 $profileData
             );
 
-            // 3) Experiences: simple approach – delete and recreate
+            // 3) Experiences
             UserExperience::where('user_id', $user->id)->delete();
 
             foreach ($request->input('experiences', []) as $experience) {
-                // Skip completely empty rows
                 if (
                     empty($experience['company_name']) &&
                     empty($experience['job_title']) &&
@@ -253,27 +262,19 @@ class UserController extends Controller
                     'user_id'      => $user->id,
                     'company_name' => $experience['company_name'] ?? null,
                     'job_title'    => $experience['job_title'] ?? null,
-                    'is_current'   => isset($experience['is_current'])
-                        ? (int) $experience['is_current']
-                        : 0,
+                    'is_current'   => isset($experience['is_current']) ? (int) $experience['is_current'] : 0,
                     'start_date'   => $experience['start_date'] ?? null,
-                    'end_date'     => !empty($experience['is_current'])
-                        ? null
-                        : ($experience['end_date'] ?? null),
+                    'end_date'     => !empty($experience['is_current']) ? null : ($experience['end_date'] ?? null),
                     'description'  => $experience['description'] ?? null,
                     'location'     => $experience['location'] ?? null,
                 ]);
             }
 
-            // 4) Educations: delete and recreate
+            // 4) Educations
             UserEducation::where('user_id', $user->id)->delete();
 
             foreach ($request->input('educations', []) as $education) {
-                // Skip empty rows
-                if (
-                    empty($education['degree_title']) &&
-                    empty($education['institution'])
-                ) {
+                if (empty($education['degree_title']) && empty($education['institution'])) {
                     continue;
                 }
 
@@ -281,41 +282,50 @@ class UserController extends Controller
                     'user_id'      => $user->id,
                     'degree_title' => $education['degree_title'] ?? null,
                     'institution'  => $education['institution'] ?? null,
-                    'is_current'   => isset($education['is_current'])
-                        ? (int) $education['is_current']
-                        : 0,
+                    'is_current'   => isset($education['is_current']) ? (int) $education['is_current'] : 0,
                     'start_date'   => $education['start_date'] ?? null,
-                    'end_date'     => !empty($education['is_current'])
-                        ? null
-                        : ($education['end_date'] ?? null),
+                    'end_date'     => !empty($education['is_current']) ? null : ($education['end_date'] ?? null),
                     'description'  => $education['description'] ?? null,
                     'gpa'          => $education['gpa'] ?? null,
                 ]);
             }
 
+            // ✅ 5) Projects (NEW) — delete & recreate like experiences/educations
+            UserProject::where('user_id', $user->id)->delete();
+
+            foreach ($request->input('projects', []) as $project) {
+                // skip empty
+                if (
+                    empty($project['title']) &&
+                    empty($project['description']) &&
+                    empty($project['live_url']) &&
+                    empty($project['github_url'])
+                ) {
+                    continue;
+                }
+
+                UserProject::create([
+                    'user_id'     => $user->id,
+                    'title'       => $project['title'] ?? null,
+                    'description' => $project['description'] ?? null,
+                    'live_url'    => $project['live_url'] ?? null,
+                    'github_url'  => $project['github_url'] ?? null,
+                ]);
+            }
+
             DB::commit();
 
-            // Reload with relations to return to frontend
-            $user->load(['profile', 'experiences', 'educations']);
+            // ✅ load projects also
+            $user->load(['profile', 'experiences', 'educations', 'projects']);
 
-            return response()->api(
-                $user,
-                true,
-                'Profile updated successfully',
-                200
-            );
+            return response()->api($user, true, 'Profile updated successfully', 200);
         } catch (\Throwable $exception) {
             DB::rollBack();
-
             report($exception);
 
-            return response()->api(
-                null,
-                false,
-                'Failed to update profile',
-                500
-            );
+            return response()->api(null, false, 'Failed to update profile', 500);
         }
     }
+
 
 }
