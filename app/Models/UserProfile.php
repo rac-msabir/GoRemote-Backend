@@ -25,7 +25,12 @@ class UserProfile extends Model
         'current_company',
         'years_of_experience',
         'resume_path',
-        'cover_letter'
+        'cover_letter',
+        'skills',
+        'availability',
+        'years_of_experience',
+        'github_profile',
+        'x_url',
     ];
 
     protected $casts = [

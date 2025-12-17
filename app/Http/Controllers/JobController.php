@@ -345,6 +345,7 @@ class JobController extends Controller
             return [
                 'id'               => $row->uuid,
                 'title'            => $row->title,
+                'slug'          => $row->slug,
                 'company'          => $company,
                 'vacancies'        => $row->vacancies,
                 'location_type'    => $row->location_type,
@@ -503,7 +504,7 @@ class JobController extends Controller
 //     }
 
 
-    public function show($jobId)
+    public function show($slug)
     {
         try {
             // Find job with relations
@@ -512,7 +513,7 @@ class JobController extends Controller
                 'preferences',
                 'screeningQuestions',
                 'descriptions'
-            ])->where('uuid', $jobId)->first();
+            ])->where('slug', $slug)->first();
 
             if (!$job) {
                 return response()->api(null, true, null, 200);
