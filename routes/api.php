@@ -21,6 +21,7 @@ Route::get('/find-seekers', [\App\Http\Controllers\Seeker\UserController::class,
 Route::get('/user-profile', [\App\Http\Controllers\Seeker\UserController::class, 'profileView'])->middleware('auth:sanctum');
 Route::post('/update-user-profile', [\App\Http\Controllers\Seeker\UserController::class, 'profileUpdate'])->middleware('auth:sanctum');
 Route::get('/profile-completion', [\App\Http\Controllers\Seeker\UserController::class, 'profileCompletionView'])->middleware('auth:sanctum');
+Route::get('/user/{id}', [\App\Http\Controllers\Seeker\UserController::class, 'candidateDetail']);
 
 // Jobs browsing (public + authed)
 Route::get('/jobs', [\App\Http\Controllers\JobController::class, 'index']);

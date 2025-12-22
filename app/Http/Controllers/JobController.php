@@ -519,7 +519,82 @@ class JobController extends Controller
                 return response()->api(null, true, null, 200);
             }
 
-            // Company details
+            // Logged-in info (used for has_applied / is_saved in job + related jobs)
+            $userId  = Auth::guard('sanctum')->id();
+            $seekerId = null;
+
+            if ($userId) {
+                $seekerId = JobSeeker::where('user_id', $userId)->value('id');
+            }
+
+            // ----- Helper to format one job as summary (for related jobs) -----
+            $mapJobSummary = function (Job $j) use ($userId, $seekerId) {
+
+                $company = [
+                    'name' => optional($j->employer)->company_name,
+                    'location' => $j->location_type === 'remote'
+                        ? 'Remote'
+                        : trim(implode(', ', array_filter([$j->city, $j->state_province, $j->country_code]))),
+                    'website' => optional($j->employer)->website,
+                ];
+
+                $postedAt = $j->posted_at ?: $j->created_at;
+                $closedAt = $j->closed_at;
+
+                $isNew = $postedAt ? Carbon::parse($postedAt)->greaterThanOrEqualTo(now()->subDays(7)) : false;
+                $isFeatured = ($j->pay_max && $j->pay_max >= 150000) || ($isNew && $j->job_type === 'full_time');
+
+                $tags = [];
+                if ($isFeatured) $tags[] = 'Featured';
+                if ($j->job_type) $tags[] = self::humanizeJobType($j->job_type);
+                if ($j->location_type === 'remote') $tags[] = 'Remote';
+
+                $salaryRange = null;
+                if ($j->pay_min || $j->pay_max) {
+                    $fmt = fn ($v) => is_null($v) ? null : ('$' . number_format((float) $v / 1000, 0) . 'k');
+                    $min = $fmt($j->pay_min);
+                    $max = $fmt($j->pay_max);
+                    $salaryRange = $min && $max ? "$min - $max" : ($min ?: $max);
+                }
+
+                $hasApplied = false;
+                $isSaved = false;
+
+                if ($userId) {
+                    $hasApplied = DB::table('job_applications')
+                        ->where('job_id', $j->id)
+                        ->where('job_seeker_id', $userId) // keeping SAME logic as your current code
+                        ->exists();
+
+                    if ($seekerId) {
+                        $isSaved = DB::table('saved_jobs')
+                            ->where('job_seeker_id', $seekerId)
+                            ->where('job_id', $j->id)
+                            ->exists();
+                    }
+                }
+
+                return [
+                    'id' => $j->uuid,
+                    'slug' => $j->slug,
+                    'title' => $j->title,
+                    'company' => $company,
+                    'vacancies' => $j->vacancies,
+                    'job_type' => self::humanizeJobType($j->job_type),
+                    'location_type' => $j->location_type,
+                    'salary_range' => $salaryRange,
+                    'tags' => $tags,
+                    'is_featured' => (bool) $isFeatured,
+                    'is_new' => (bool) $isNew,
+                    'posted_at' => $postedAt ? Carbon::parse($postedAt)->toISOString() : null,
+                    'closed_at' => $closedAt ? Carbon::parse($closedAt)->toISOString() : null,
+                    'application_link' => $company['website'] ?: null,
+                    'has_applied' => $hasApplied,
+                    'is_saved' => $isSaved,
+                ];
+            };
+
+            // Company details (for main job)
             $company = [
                 'name' => optional($job->employer)->company_name,
                 'location' => $job->location_type === 'remote'
@@ -552,24 +627,22 @@ class JobController extends Controller
             // Salary
             $salaryRange = null;
             if ($job->pay_min || $job->pay_max) {
-                $fmt = fn ($v) => is_null($v) ? null : ('$'.number_format((float)$v/1000, 0).'k');
+                $fmt = fn ($v) => is_null($v) ? null : ('$' . number_format((float) $v / 1000, 0) . 'k');
                 $min = $fmt($job->pay_min);
                 $max = $fmt($job->pay_max);
                 $salaryRange = $min && $max ? "$min - $max" : ($min ?: $max);
             }
 
-            // User-related info
-            $userId = Auth::guard('sanctum')->id();
+            // User-related info (main job)
             $hasApplied = false;
             $isSaved = false;
 
             if ($userId) {
                 $hasApplied = DB::table('job_applications')
                     ->where('job_id', $job->id)
-                    ->where('job_seeker_id', $userId)
+                    ->where('job_seeker_id', $userId) // keeping SAME logic as your current code
                     ->exists();
 
-                $seekerId = JobSeeker::where('user_id', $userId)->value('id');
                 if ($seekerId) {
                     $isSaved = DB::table('saved_jobs')
                         ->where('job_seeker_id', $seekerId)
@@ -590,6 +663,7 @@ class JobController extends Controller
             $data = [
                 'id' => $job->uuid,
                 'title' => $job->title,
+                'slug' => $job->slug,
                 'company' => $company,
                 'vacancies' => $job->vacancies,
                 'job_type' => self::humanizeJobType($job->job_type),
@@ -598,14 +672,38 @@ class JobController extends Controller
                 'tags' => $tags,
                 'is_featured' => (bool) $isFeatured,
                 'is_new' => (bool) $isNew,
-                'posted_at' => optional($postedAt)?->toISOString(),
-                'closed_at' => optional($closedAt)?->toISOString(),
+                'posted_at' => $postedAt ? Carbon::parse($postedAt)->toISOString() : null,
+                'closed_at' => $closedAt ? Carbon::parse($closedAt)->toISOString() : null,
                 'descriptions' => $descriptions,
                 'benefits' => $benefits,
                 'application_link' => $company['website'] ?: null,
                 'has_applied' => $hasApplied,
                 'is_saved' => $isSaved,
             ];
+
+            // ✅ RELATED JOBS (3 random from same category_id)
+            $related = Job::with(['employer'])
+                ->where('category_id', $job->category_id)
+                ->where('id', '!=', $job->id)
+                ->inRandomOrder()
+                ->limit(3)
+                ->get();
+
+            // If category has < 3 jobs, fill remaining with random other jobs
+            if ($related->count() < 3) {
+                $need = 3 - $related->count();
+
+                $fill = Job::with(['employer'])
+                    ->where('id', '!=', $job->id)
+                    ->whereNotIn('id', $related->pluck('id')->all())
+                    ->inRandomOrder()
+                    ->limit($need)
+                    ->get();
+
+                $related = $related->merge($fill);
+            }
+
+            $relatedJobs = $related->map(fn ($j) => $mapJobSummary($j))->values()->all();
 
             // Example lists
             $benefitsList = DB::table('job_benefits')->pluck('name')->all();
@@ -614,6 +712,7 @@ class JobController extends Controller
 
             $responseData = [
                 'jobs' => $data,
+                'related_jobs' => $relatedJobs, // ✅ added here
                 'benefits' => $benefitsList,
                 'categories' => $categories,
                 'employers' => $employersList,
@@ -623,10 +722,9 @@ class JobController extends Controller
             return response()->api($responseData);
 
         } catch (\Throwable $e) {
-            return response()->api(null, true, $e->getMessage(), 500);
+            return response()->api(null, false, $e->getMessage(), 500);
         }
     }
-
 
 
 
@@ -947,8 +1045,6 @@ class JobController extends Controller
             return response()->api(null, true, $e->getMessage(), 500); // ✅ error response
         }
     }
-
-
 
 }
 

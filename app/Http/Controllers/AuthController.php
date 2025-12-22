@@ -6,8 +6,10 @@ use App\Models\JobSeeker;
 use App\Models\Company;
 use App\Models\CompanyUser;
 use App\Models\User;
+use App\Mail\WelcomeMail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
@@ -39,6 +41,12 @@ class AuthController extends Controller
                 'role' => 'owner',
             ]);
         }
+
+        // try {
+            Mail::to($user->email)->send(new WelcomeMail($user));
+        // } catch (\Throwable $e) {
+        //     report($e);
+        // }
 
         $token = $user->createToken('api')->plainTextToken;
         return response()->json(['user' => $user, 'token' => $token]);
