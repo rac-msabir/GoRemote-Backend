@@ -202,6 +202,8 @@ class UserController extends Controller
         'cover_letter' => ['nullable', 'string'],
         'resume'       => ['nullable', 'file', 'mimes:pdf,doc,docx', 'max:10240'],
 
+        'title'    => ['nullable', 'string', 'max:255'],
+        'about_me' => ['nullable', 'string'],
         // ✅ NEW: profile picture (users.image)
         'image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'], // 5MB
 
@@ -240,21 +242,36 @@ class UserController extends Controller
 
     try {
         // ✅ Upload profile image (users.image)
+        
         if ($request->hasFile('image')) {
-            // delete old image if exists
-            if (!empty($user->image) && Storage::disk('public')->exists($user->image)) {
-                Storage::disk('public')->delete($user->image);
+
+            // Delete old image if exists (from public folder)
+            if (!empty($user->image)) {
+                $oldImagePath = public_path($user->image);
+
+                if (file_exists($oldImagePath)) {
+                    unlink($oldImagePath);
+                }
             }
 
             $imageFile = $request->file('image');
-            $imageName = Str::uuid()->toString() . '.' . $imageFile->getClientOriginalExtension();
+            $imageName = Str::uuid() . '.' . $imageFile->getClientOriginalExtension();
 
             $year  = now()->format('Y');
             $month = now()->format('m');
 
-            $imagePath = $imageFile->storeAs("profile_images/{$year}/{$month}", $imageName, 'public');
+            $destinationPath = public_path("profile_images/{$year}/{$month}");
 
-            $user->image = $imagePath;
+            // Create directory if it doesn't exist
+            if (!file_exists($destinationPath)) {
+                mkdir($destinationPath, 0755, true);
+            }
+
+            // Move image to public directory
+            $imageFile->move($destinationPath, $imageName);
+
+            // Save relative public path in DB
+            $user->image = "profile_images/{$year}/{$month}/{$imageName}";
         }
 
         // 1) Update user
@@ -305,6 +322,8 @@ class UserController extends Controller
 
             'availability'        => $validated['availability'] ?? null,
             'years_of_experience' => $validated['years_of_experience'] ?? null,
+            'title' => $validated['title'] ?? null,
+            'about_me' => $validated['about_me'] ?? null,
 
             'skills' => $skills,
         ];
@@ -400,10 +419,9 @@ class UserController extends Controller
     } catch (\Throwable $exception) {
         DB::rollBack();
         report($exception);
-
         return response()->api(null, false, 'Failed to update profile', 500);
     }
-
+}
 
 
    public function profileCompletionView(Request $request)

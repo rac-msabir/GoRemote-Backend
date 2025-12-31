@@ -31,10 +31,13 @@ class UserProfile extends Model
         'years_of_experience',
         'github_profile',
         'x_url',
+        'title',
+        'about_me',
     ];
 
     protected $casts = [
         'years_of_experience' => 'integer',
+        'skills' => 'array',
     ];
 
     public function user(): BelongsTo
