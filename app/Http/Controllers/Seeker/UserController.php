@@ -649,7 +649,7 @@ class UserController extends Controller
             'name'  => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
-
+            'is_public' => ['nullable', 'boolean'],
             'country'  => ['nullable', 'string', 'max:255'],
             'province' => ['nullable', 'string', 'max:255'],
             'city'     => ['nullable', 'string', 'max:255'],
@@ -740,6 +740,7 @@ class UserController extends Controller
             // 1) Update user
             $user->name  = $validated['name'];
             $user->email = $validated['email'];
+            $user->is_public = isset($validated['is_public']) ? (bool) $validated['is_public'] : $user->is_public;
             $user->save();
 
             // ✅ Normalize skills
@@ -881,7 +882,6 @@ class UserController extends Controller
             return response()->api($user, true, 'Profile updated successfully', 200);
         } catch (\Throwable $exception) {
             DB::rollBack();
-            dd($exception->getMessage());
             report($exception);
             return response()->api(null, false, 'Failed to update profile', 500);
         }
