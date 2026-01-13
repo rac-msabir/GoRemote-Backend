@@ -13,8 +13,8 @@ return new class extends Migration
     {
         Schema::table('users', function (Blueprint $table) {
 
-        $table->boolean('is_public')->default(true)->after('email');
-        
+        $table->boolean('is_public')->default(false)->after('email');
+
         });
     }
 
