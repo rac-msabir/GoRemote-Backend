@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
             JobSeeder::class,
             CompanyReviewSeeder::class,
             ApplicationSeeder::class,
+            UserSeeder::class,
         ]);
     }
 }

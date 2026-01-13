@@ -6,6 +6,8 @@ use Illuminate\Support\Facades\Route;
 Route::post('/auth/register', [\App\Http\Controllers\AuthController::class, 'register']);
 Route::post('/auth/login', [\App\Http\Controllers\AuthController::class, 'login']);
 Route::post('/auth/logout', [\App\Http\Controllers\AuthController::class, 'logout'])->middleware('auth:sanctum');
+Route::post('/auth/password/forgot', [\App\Http\Controllers\AuthController::class, 'sendResetEmail']);
+Route::post('/auth/password/reset', [\App\Http\Controllers\AuthController::class, 'resetPassword']);
 
 // Onboarding - Job Seeker
 Route::middleware('auth:sanctum')->group(function () {
@@ -22,6 +24,7 @@ Route::get('/user-profile', [\App\Http\Controllers\Seeker\UserController::class,
 Route::post('/update-user-profile', [\App\Http\Controllers\Seeker\UserController::class, 'profileUpdate'])->middleware('auth:sanctum');
 Route::get('/profile-completion', [\App\Http\Controllers\Seeker\UserController::class, 'profileCompletionView'])->middleware('auth:sanctum');
 Route::get('/user/{id}', [\App\Http\Controllers\Seeker\UserController::class, 'candidateDetail']);
+Route::post('/cv/parsing', [\App\Http\Controllers\Seeker\UserController::class, 'CvParsing'])->middleware('auth:sanctum');
 
 // Jobs browsing (public + authed)
 Route::get('/jobs', [\App\Http\Controllers\JobController::class, 'index']);
@@ -35,6 +38,7 @@ Route::get('/get-saved-jobs', [\App\Http\Controllers\JobController::class, 'getS
 Route::post('/jobs/{job}/save', [\App\Http\Controllers\Seeker\SavedJobController::class, 'store'])->middleware('auth:sanctum');
 Route::delete('/jobs/{job}/save', [\App\Http\Controllers\Seeker\SavedJobController::class, 'destroy'])->middleware('auth:sanctum');
 Route::post('/post-job', [\App\Http\Controllers\Seeker\SavedJobController::class, 'postJobs']);
+Route::get('/employeers', [\App\Http\Controllers\Seeker\SavedJobController::class, 'employeers']);
 
 Route::post('/jobs/{job}/apply', [\App\Http\Controllers\JobApplicationController::class, 'apply'])->middleware('auth:sanctum');
 
