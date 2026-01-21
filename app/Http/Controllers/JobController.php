@@ -345,7 +345,7 @@ class JobController extends Controller
             return [
                 'id'               => $row->uuid,
                 'title'            => $row->title,
-                'slug'          => $row->slug,
+                'slug'             => $row->slug,
                 'company'          => $company,
                 'vacancies'        => $row->vacancies,
                 'location_type'    => $row->location_type,
@@ -1026,6 +1026,7 @@ class JobController extends Controller
                 ->select([
                     'jobs.title',
                     'jobs.uuid',
+                    'jobs.slug',
                     'employers.company_name',
                 ])
                 ->leftJoin('employers', 'employers.id', '=', 'jobs.employer_id')

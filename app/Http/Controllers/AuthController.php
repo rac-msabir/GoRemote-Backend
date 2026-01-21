@@ -30,6 +30,7 @@ class AuthController extends Controller
 
         $user = User::create([
             'name' => $validated['name'],
+            // 'slug' => Str::slug($validated['name']) . '-' . substr((string) Str::uuid(), 0, 8),
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
             'role' => $validated['role'] ?? 'seeker',

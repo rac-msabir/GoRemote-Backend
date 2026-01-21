@@ -8,6 +8,7 @@ Route::post('/auth/login', [\App\Http\Controllers\AuthController::class, 'login'
 Route::post('/auth/logout', [\App\Http\Controllers\AuthController::class, 'logout'])->middleware('auth:sanctum');
 Route::post('/auth/password/forgot', [\App\Http\Controllers\AuthController::class, 'sendResetEmail']);
 Route::post('/auth/password/reset', [\App\Http\Controllers\AuthController::class, 'resetPassword']);
+Route::post('/talent/cv/parsing', [\App\Http\Controllers\CvParsingController::class, 'CvParsing']);
 
 // Onboarding - Job Seeker
 Route::middleware('auth:sanctum')->group(function () {

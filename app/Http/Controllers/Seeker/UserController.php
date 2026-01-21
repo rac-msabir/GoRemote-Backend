@@ -28,7 +28,7 @@ class UserController extends Controller
 
             $seekers = User::query()
                 ->where('role', 'seeker')
-                ->select(['id','uuid', 'name', 'email']) // keep it light
+                ->select(['id','uuid', 'name', 'email','slug']) // keep it light
                 ->with([
                     'profile',
                     // Experiences: current ones first, then by start_date desc
@@ -70,7 +70,7 @@ class UserController extends Controller
                     'uuid'  => $user->uuid,
                     'name'  => $user->name ?? null,
                     'email' => $user->email ?? null,
-
+                    'slug' => $user->slug ?? null,
                     'profile' => [
                         'phone'   => optional($user->profile)->phone,
                         'city'    => optional($user->profile)->city,
@@ -143,10 +143,11 @@ class UserController extends Controller
         }
     }
 
-    public function candidateDetail(string $uuid)
+    public function candidateDetail(string $value)
     {
         $user = User::with(['profile', 'experiences', 'educations', 'projects'])
-            ->where('uuid', $uuid)
+            ->where('uuid', $value)
+            ->orWhere('slug', $value)
             ->first();
 
         if (!$user) {
@@ -741,6 +742,16 @@ class UserController extends Controller
             $user->name  = $validated['name'];
             $user->email = $validated['email'];
             $user->is_public = isset($validated['is_public']) ? (bool) $validated['is_public'] : $user->is_public;
+            // ✅ slug logic
+            if ($user->is_public) {
+                // if already has slug keep it, otherwise generate
+                if (empty($user->slug)) {
+                    $user->slug = Str::slug($validated['name']) . '-' . substr((string) Str::uuid(), 0, 8);
+                }
+            } else {
+                // if private => remove slug
+                $user->slug = null;
+            }
             $user->save();
 
             // ✅ Normalize skills

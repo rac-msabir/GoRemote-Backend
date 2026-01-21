@@ -29,6 +29,7 @@ class User extends Authenticatable
         'provider_id',
         'role',
         'uuid',
+        'slug',
     ];
 
     /**
