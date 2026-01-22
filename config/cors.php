@@ -5,6 +5,7 @@ return [
     'allowed_methods' => ['*'],
     'allowed_origins' => [
     'http://localhost:5173',
+    'https://go-remote.io',
     'http://127.0.0.1:5173',
     'https://go-remote-frontend-4hftwjvg3-bilals-projects-5354ef85.vercel.app',
 ],
