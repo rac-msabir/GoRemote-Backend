@@ -80,16 +80,16 @@ class UserController extends Controller
                     ],
 
                     // Desired titles from JobSeeker relation
-                    'desired_titles' => optional(optional($user->jobSeeker)->desiredTitles)
-                        ->map(function ($title) {
-                            return [
-                                'id'       => $title->id,
-                                'title'    => $title->title ?? null,
-                                'priority' => $title->priority ?? null,
-                            ];
-                        })
-                        ->values()
-                        ->all() ?? [],
+                    // 'desired_titles' => optional(optional($user->jobSeeker)->desiredTitles)
+                    //     ->map(function ($title) {
+                    //         return [
+                    //             'id'       => $title->id,
+                    //             'title'    => $title->title ?? null,
+                    //             'priority' => $title->priority ?? null,
+                    //         ];
+                    //     })
+                    //     ->values()
+                    //     ->all() ?? [],
 
                     // Experiences array (from user_experiences table)
                     'experiences' => $user->experiences
